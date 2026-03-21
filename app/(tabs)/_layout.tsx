@@ -15,6 +15,7 @@ export default function TabLayout() {
         tabBarActiveTintColor: Colors[colorScheme ?? 'light'].tint,
         headerShown: true, // Show header for Dashboard
         tabBarButton: HapticTab,
+        tabBarStyle: { display: 'none' },
         headerTitleStyle: {
           fontWeight: 'bold',
         },
@@ -22,6 +23,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
+          headerShown: false,
           title: 'Dashboard',
           tabBarLabel: 'Tabs',
           tabBarIcon: ({ color }) => <IconSymbol size={28} name="list.bullet.rectangle" color={color} />,

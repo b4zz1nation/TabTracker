@@ -6,6 +6,9 @@ export interface Customer {
   name: string;
   balance: number;
   created_at: string;
+  interest_enabled: number;
+  interest_rate: number;
+  interest_type: 'Daily' | 'Monthly' | 'Yearly' | null;
 }
 
 export function useCustomers() {
@@ -25,9 +28,18 @@ export function useCustomers() {
     }
   }, [db]);
 
-  const addCustomer = async (name: string, initialBalance: number = 0) => {
+  const addCustomer = async (
+    name: string,
+    initialBalance: number = 0,
+    interestEnabled: boolean = false,
+    interestRate: number = 0,
+    interestType: 'Daily' | 'Monthly' | 'Yearly' | null = null
+  ) => {
     try {
-      await db.runAsync('INSERT INTO customers (name, balance) VALUES (?, ?)', [name, initialBalance]);
+      await db.runAsync(
+        'INSERT INTO customers (name, balance, interest_enabled, interest_rate, interest_type) VALUES (?, ?, ?, ?, ?)',
+        [name, initialBalance, interestEnabled ? 1 : 0, interestRate, interestType]
+      );
       await fetchCustomers();
     } catch (error) {
       console.error('Error adding customer:', error);
@@ -35,9 +47,19 @@ export function useCustomers() {
     }
   };
 
-  const updateCustomer = async (id: number, name: string, balance: number) => {
+  const updateCustomer = async (
+    id: number,
+    name: string,
+    balance: number,
+    interestEnabled: boolean = false,
+    interestRate: number = 0,
+    interestType: 'Daily' | 'Monthly' | 'Yearly' | null = null
+  ) => {
     try {
-      await db.runAsync('UPDATE customers SET name = ?, balance = ? WHERE id = ?', [name, balance, id]);
+      await db.runAsync(
+        'UPDATE customers SET name = ?, balance = ?, interest_enabled = ?, interest_rate = ?, interest_type = ? WHERE id = ?',
+        [name, balance, interestEnabled ? 1 : 0, interestRate, interestType, id]
+      );
       await fetchCustomers();
     } catch (error) {
       console.error('Error updating customer:', error);
