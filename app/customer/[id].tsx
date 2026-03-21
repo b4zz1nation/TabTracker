@@ -122,7 +122,11 @@ export default function CustomerDetailScreen() {
     closeSheet(() => {
       router.push({
         pathname: '/add-customer',
-        params: { lendId: l.id, customerId: l.customer_id },
+        params: { 
+          lendId: l.id, 
+          customerId: l.customer_id,
+          readOnly: l.status === 'Completed' ? 'true' : 'false'
+        },
       });
     });
   };
@@ -256,12 +260,14 @@ export default function CustomerDetailScreen() {
             <View className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-6" />
 
             <View className="gap-3">
-              {/* Edit */}
+              {/* Edit / View Details */}
               <Pressable onPress={handleEditLend} className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700">
                 <View className="w-10 h-10 rounded-full items-center justify-center bg-sky-100 dark:bg-sky-900/40 mr-4">
-                  <Ionicons name="create-outline" size={20} color="#0ea5e9" />
+                  <Ionicons name={selectedLend?.status === 'Completed' ? 'eye-outline' : 'create-outline'} size={20} color="#0ea5e9" />
                 </View>
-                <Text className="text-base font-semibold text-gray-900 dark:text-gray-100 flex-1">Edit</Text>
+                <Text className="text-base font-semibold text-gray-900 dark:text-gray-100 flex-1">
+                  {selectedLend?.status === 'Completed' ? 'View Details' : 'Edit'}
+                </Text>
                 <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
               </Pressable>
 

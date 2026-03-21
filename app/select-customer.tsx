@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react';
-import { FlatList, Pressable, TextInput, View, Text, TouchableOpacity } from 'react-native';
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, TextInput, View, Text, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -56,6 +56,7 @@ export default function SelectCustomerScreen() {
 
   return (
     <SheetScreen onClose={() => router.back()} dragDirections={{ toBottom: true, toTop: false, toLeft: false, toRight: false }} opacityOnGestureMove={true} containerRadiusSync={true}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 20} style={{ flex: 1 }}>
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={['bottom']}>
       <View className="flex-1">
         {/* Close Button */}
@@ -89,6 +90,7 @@ export default function SelectCustomerScreen() {
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
           contentContainerStyle={{ paddingBottom: 40 }}
+          keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View className="items-center mt-20 gap-3">
               <Ionicons name="search-outline" size={48} color="#d1d5db" />
@@ -100,6 +102,7 @@ export default function SelectCustomerScreen() {
         />
       </View>
     </SafeAreaView>
+    </KeyboardAvoidingView>
     </SheetScreen>
   );
 }

@@ -3,7 +3,7 @@ import { Stack, usePathname, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SQLiteProvider } from 'expo-sqlite';
 import React, { Component, Suspense, useCallback, useEffect, useState } from 'react';
-import { Platform, View, Text, ActivityIndicator } from 'react-native';
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, View, Text, ActivityIndicator } from 'react-native';
 import 'react-native-reanimated';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import '../global.css';
@@ -112,7 +112,7 @@ export default function RootLayout() {
   }, [hasProfile, isBootstrapping, pathname, router]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView className="flex-1 bg-gray-50 dark:bg-gray-950">
     <View className="flex-1 bg-gray-50 dark:bg-gray-950">
       <AuthContext.Provider value={{ markProfileReady }}>
         <DatabaseErrorBoundary>

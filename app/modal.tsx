@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { TextInput, Pressable, View, Alert, KeyboardAvoidingView, Platform, Text, Switch } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -36,6 +37,7 @@ export default function ModalScreen() {
       : null
   );
   const [interestError, setInterestError] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
   const [showInterestValidation, setShowInterestValidation] = useState(false);
 
   const handleAmountChange = (text: string) => {
@@ -132,8 +134,12 @@ export default function ModalScreen() {
         );
       }
       router.back();
-    } catch (e) {
-      Alert.alert('Error', 'Failed to save customer');
+    } catch (e: any) {
+      if (e.message === 'DUPLICATE_NAME') {
+        setFormError('A customer with this name already exists.');
+      } else {
+        Alert.alert('Error', 'Failed to save customer');
+      }
     }
   };
 
@@ -156,18 +162,22 @@ export default function ModalScreen() {
   };
 
   return (
-    <KeyboardAvoidingView 
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      className="flex-1"
-    >
-      <View className="flex-1 p-6 bg-white dark:bg-zinc-950">
+      <KeyboardAwareScrollView
+        className="flex-1 bg-white dark:bg-zinc-950"
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: 40 }}
+        keyboardShouldPersistTaps="handled"
+        enableOnAndroid={true}
+        extraScrollHeight={80}
+        showsVerticalScrollIndicator={false}
+      >
+      <View className="flex-1 p-6">
         <Text className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-8">
           {isEditing ? 'Edit Records' : 'New Customer'}
         </Text>
 
-        {showInterestValidation && interestError ? (
+        {formError || (showInterestValidation && interestError) ? (
           <View className="mb-5 rounded-2xl bg-rose-500 dark:bg-rose-600 px-4 py-3">
-            <Text className="text-white font-semibold">{interestError}</Text>
+            <Text className="text-white font-semibold">{formError || interestError}</Text>
           </View>
         ) : null}
 
@@ -276,7 +286,8 @@ export default function ModalScreen() {
             <Text className="text-rose-500 font-semibold text-base">Delete Permanently</Text>
           </Pressable>
         )}
+        <View className="pb-10" />
       </View>
-    </KeyboardAvoidingView>
+      </KeyboardAwareScrollView>
   );
 }

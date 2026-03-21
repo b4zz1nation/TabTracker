@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { TextInput, Pressable, View, Alert, KeyboardAvoidingView, Platform, Text, Switch, ScrollView, TouchableOpacity } from 'react-native';
+import { TextInput, Pressable, View, Alert, KeyboardAvoidingView, Platform, Text, Switch, TouchableOpacity } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
@@ -122,9 +123,8 @@ export default function AddLendScreen() {
 
   return (
     <SheetScreen onClose={() => router.back()} dragDirections={{ toBottom: true, toTop: false, toLeft: false, toRight: false }} opacityOnGestureMove={true} containerRadiusSync={true}>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} className="flex-1">
-        <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={['top']}>
-          <ScrollView className="flex-1" contentContainerStyle={{ padding: 24, paddingBottom: 48 }} keyboardShouldPersistTaps="handled">
+        <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={['top', 'left', 'right']}>
+          <KeyboardAwareScrollView className="flex-1 bg-gray-50 dark:bg-gray-950" contentContainerStyle={{ flexGrow: 1, padding: 24, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" enableOnAndroid={true} extraScrollHeight={80} showsVerticalScrollIndicator={false}>
           <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6} className="w-11 h-11 items-center justify-center -ml-2 mb-2">
             <Ionicons name="close" size={28} color={colorScheme === 'dark' ? '#ffffff' : '#1f2937'} />
           </TouchableOpacity>
@@ -188,14 +188,14 @@ export default function AddLendScreen() {
         </View>
 
         <Pressable
-          className={`h-16 rounded-2xl items-center justify-center shadow-lg shadow-sky-500/30 ${isSaving ? 'bg-sky-400' : 'bg-sky-500 active:opacity-90 active:scale-[0.98]'}`}
+          className={`h-16 rounded-2xl items-center justify-center shadow-lg shadow-sky-500/30 mb-8 ${isSaving ? 'bg-sky-400' : 'bg-sky-500 active:opacity-90 active:scale-[0.98]'}`}
           onPress={handleSave} disabled={isSaving}
         >
           <Text className="text-white text-lg font-bold">{isSaving ? 'Saving...' : isEditing ? 'Update Lend' : 'Add Lend'}</Text>
         </Pressable>
-        </ScrollView>
+        <View className="pb-10" />
+        </KeyboardAwareScrollView>
       </SafeAreaView>
-    </KeyboardAvoidingView>
     </SheetScreen>
   );
 }
