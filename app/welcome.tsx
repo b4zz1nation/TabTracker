@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 import { saveUserProfile } from '@/services/user-profile';
 import { useAuth } from '@/contexts/auth-context';
+import ScreenContainer from '@/components/screen-container';
 
 export default function WelcomeScreen() {
   const router = useRouter();
@@ -12,6 +13,11 @@ export default function WelcomeScreen() {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const scrollViewRef = useRef<any>(null);
+
+  const handleFocus = (reactNode: any) => {
+    scrollViewRef.current?.scrollToFocusedInput(reactNode);
+  };
 
   const handleStart = async () => {
     const trimmed = name.trim();
@@ -34,8 +40,8 @@ export default function WelcomeScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950">
-      <View className="flex-1 px-6 justify-center">
+    <ScreenContainer centerContent scrollViewRef={scrollViewRef}>
+      <View className="px-6">
         <View className="mb-10 items-center">
           <Text className="text-4xl font-extrabold text-sky-600 dark:text-sky-400">TabTracker</Text>
           <Text className="mt-2 text-sm text-gray-500 dark:text-gray-400">Track balances in seconds</Text>
@@ -54,6 +60,7 @@ export default function WelcomeScreen() {
                 setError('');
               }
             }}
+            onFocus={(event) => handleFocus(event.target)}
             autoFocus
             returnKeyType="done"
             onSubmitEditing={handleStart}
@@ -71,6 +78,6 @@ export default function WelcomeScreen() {
           <Text className="text-white text-lg font-bold">{isSaving ? 'Saving...' : 'Get Started'}</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }

@@ -4,8 +4,8 @@ This document outlines the roadmap, architectural decisions, and development sta
 
 ## 🚀 Project Roadmap
 
-### Phase 1: Core Tab Tracking (Current Scope)
-The initial goal is to provide a seamless "one-tap" experience for tracking debts and balances.
+### Phase 1: Core Tab Tracking (Iteration 2)
+The initial goal is to provide a seamless "one-tap" experience for tracking debts and balances. Iteration 2 focuses on refining the balance logic and deletion flows.
 
 **High-Level Functional Requirements:**
 - **Manage Customers:** CRUD operations for names and contact info (optional).
@@ -65,6 +65,15 @@ The initial goal is to provide a seamless "one-tap" experience for tracking debt
 -   Dashboard should update immediately after modal add/edit:
     - `app/(tabs)/index.tsx` should re-fetch customers on focus using `useFocusEffect`
     - `useCustomers()` should expose a `refresh()` function that re-queries SQLite and updates local state
+
+### Keyboard & Screen Layout Rules
+-   **Global keyboard handling lives in `app/_layout.tsx`:** `KeyboardAvoidingView` + `Keyboard.dismiss` `Pressable` wrap the entire app. Individual screens do NOT need these wrappers.
+-   **Reusable `ScreenContainer` component (`components/screen-container.tsx`):** Provides `SafeAreaView`, `KeyboardAvoidingView`, keyboard-dismiss-on-tap, and optional `ScrollView` in a single wrapper.
+-   **EVERY new screen** must use either `ScreenContainer` or follow the same pattern (SafeAreaView → KAV → ScrollView).
+-   **NEVER** use a plain `View` or `SafeAreaView` as the root of a screen that has `TextInput` fields.
+-   **NEVER** place `TextInput` inside a non-scrollable container.
+-   **Always** set `keyboardShouldPersistTaps="handled"` on any `ScrollView` or `FlatList` that contains buttons or inputs.
+-   **Modal bottom sheets** that have `TextInput` need their own `KeyboardAvoidingView` with `keyboardVerticalOffset` (iOS: `40`, Android: `20`) to account for modal position.
 
 ---
 

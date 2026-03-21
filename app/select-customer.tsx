@@ -1,13 +1,12 @@
 import { useState, useCallback } from 'react';
 import { FlatList, Pressable, TextInput, View, Text, TouchableOpacity } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useCustomers, Customer } from '@/hooks/use-customers';
 import { useColorScheme } from '@/hooks/use-color-scheme';
-import { SheetScreen } from 'react-native-sheet-transitions';
+import ScreenContainer from '@/components/screen-container';
 
 export default function SelectCustomerScreen() {
   const router = useRouter();
@@ -33,7 +32,7 @@ export default function SelectCustomerScreen() {
       router.push({
         pathname: '/add-lend',
         params: {
-          customer_id: item.id,
+          customer_id: item.id.toString(),
           customer_name: item.name,
         },
       });
@@ -55,21 +54,22 @@ export default function SelectCustomerScreen() {
   );
 
   return (
-    <SheetScreen onClose={() => router.back()} dragDirections={{ toBottom: true, toTop: false, toLeft: false, toRight: false }} opacityOnGestureMove={true} containerRadiusSync={true}>
-    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={['bottom']}>
+    <ScreenContainer scrollable={false} edges={['top', 'bottom']}>
       <View className="flex-1">
-        {/* Close Button */}
-        <View className="px-4 pt-3 pb-1">
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6} className="w-11 h-11 items-center justify-center -ml-1">
+        {/* Close Button & Title */}
+        <View className="px-4 pt-3 pb-4">
+          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6} className="w-11 h-11 items-center justify-center -ml-1 mb-2">
             <Ionicons name="close" size={28} color={colorScheme === 'dark' ? '#ffffff' : '#1f2937'} />
           </TouchableOpacity>
+          <Text className="text-3xl font-bold text-gray-900 dark:text-gray-100 px-1">Select Customer</Text>
         </View>
+
         {/* Search Bar */}
-        <View className="px-4 pt-1 pb-2">
-          <View className="flex-row items-center bg-gray-100 dark:bg-zinc-900 rounded-2xl px-4 h-12">
-            <Ionicons name="search" size={18} color="#9ca3af" />
+        <View className="px-4 pb-4">
+          <View className="flex-row items-center bg-gray-100 dark:bg-zinc-900 rounded-2xl px-4 h-14">
+            <Ionicons name="search" size={20} color="#9ca3af" />
             <TextInput
-              className="flex-1 ml-2 text-base text-gray-900 dark:text-gray-100"
+              className="flex-1 ml-2 text-lg text-gray-900 dark:text-gray-100"
               placeholder="Search customers…"
               placeholderTextColor="#9ca3af"
               value={search}
@@ -84,11 +84,13 @@ export default function SelectCustomerScreen() {
             )}
           </View>
         </View>
+
         <FlatList
           data={filtered}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
-          contentContainerStyle={{ paddingBottom: 40 }}
+          contentContainerStyle={{ paddingBottom: 100 }}
+          keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View className="items-center mt-20 gap-3">
               <Ionicons name="search-outline" size={48} color="#d1d5db" />
@@ -99,7 +101,6 @@ export default function SelectCustomerScreen() {
           }
         />
       </View>
-    </SafeAreaView>
-    </SheetScreen>
+    </ScreenContainer>
   );
 }

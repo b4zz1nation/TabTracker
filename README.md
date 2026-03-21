@@ -1,6 +1,7 @@
-# TabTracker
+# TabTracker (v1.1.0 - Iteration 2)
 
 TabTracker is an Expo (SDK 54+) app using Expo Router + NativeWind. It stores customer/tab data locally via SQLite.
+Current status: Phase 1 (Core Tab Tracking) - Iteration 2 (Refinement & Polishing).
 
 ## New machine quick start
 ### Prerequisites

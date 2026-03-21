@@ -36,9 +36,12 @@ export function useCustomers() {
     interestType: 'Daily' | 'Monthly' | 'Yearly' | null = null
   ) => {
     try {
+      const existing = await db.getFirstAsync<{ id: number }>('SELECT id FROM customers WHERE LOWER(name) = LOWER(?)', [name.trim()]);
+      if (existing) throw new Error('DUPLICATE_NAME');
+      
       await db.runAsync(
         'INSERT INTO customers (name, balance, interest_enabled, interest_rate, interest_type) VALUES (?, ?, ?, ?, ?)',
-        [name, initialBalance, interestEnabled ? 1 : 0, interestRate, interestType]
+        [name.trim(), initialBalance, interestEnabled ? 1 : 0, interestRate, interestType]
       );
       await fetchCustomers();
     } catch (error) {
@@ -56,9 +59,12 @@ export function useCustomers() {
     interestType: 'Daily' | 'Monthly' | 'Yearly' | null = null
   ) => {
     try {
+      const existing = await db.getFirstAsync<{ id: number }>('SELECT id FROM customers WHERE LOWER(name) = LOWER(?) AND id != ?', [name.trim(), id]);
+      if (existing) throw new Error('DUPLICATE_NAME');
+
       await db.runAsync(
         'UPDATE customers SET name = ?, balance = ?, interest_enabled = ?, interest_rate = ?, interest_type = ? WHERE id = ?',
-        [name, balance, interestEnabled ? 1 : 0, interestRate, interestType, id]
+        [name.trim(), balance, interestEnabled ? 1 : 0, interestRate, interestType, id]
       );
       await fetchCustomers();
     } catch (error) {
