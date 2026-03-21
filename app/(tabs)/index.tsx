@@ -1,98 +1,82 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { FlatList, Pressable, View, Text } from 'react-native';
+import { Link, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
+import { useCallback } from 'react';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { useCustomers, Customer } from '@/hooks/use-customers';
+import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const { customers, isLoading, refresh } = useCustomers();
+  const colorScheme = useColorScheme();
+  const router = useRouter();
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  // Ensure dashboard reflects changes made in the modal immediately after navigating back.
+  useFocusEffect(
+    useCallback(() => {
+      refresh();
+    }, [refresh])
+  );
+
+  const totalOutstanding = customers.reduce((sum, c) => sum + c.balance, 0);
+
+  const renderItem = ({ item }: { item: Customer }) => (
+    <Pressable 
+      onPress={() => router.push({ pathname: '/modal', params: { id: item.id, name: item.name, balance: item.balance } })}
+      className="flex-row items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800 active:opacity-70 bg-white dark:bg-black"
+    >
+      <View className="flex-1">
+        <Text className="text-lg font-semibold text-gray-900 dark:text-gray-100">{item.name}</Text>
+        <Text className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{new Date(item.created_at).toLocaleDateString()}</Text>
+      </View>
+      <View className="flex-row items-center gap-2">
+        <Text 
+          className={`text-lg font-bold ${
+            item.balance > 0 ? 'text-red-500' : item.balance < 0 ? 'text-green-500' : 'text-gray-400 dark:text-gray-500'
+          }`}
+        >
+          {item.balance > 0 ? `-$${item.balance.toFixed(2)}` : `$${Math.abs(item.balance).toFixed(2)}`}
+        </Text>
+        <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
+      </View>
+    </Pressable>
+  );
+
+  return (
+    <View className="flex-1 bg-gray-50 dark:bg-zinc-950 pt-16">
+      {/* Header Summary */}
+      <View className="m-4 p-6 rounded-3xl items-center justify-center bg-sky-50 dark:bg-sky-950/20">
+        <Text className="text-sm font-medium uppercase tracking-widest text-sky-600 dark:text-sky-400 mb-1">Total Owed to You</Text>
+        <Text className={`text-4xl font-extrabold ${totalOutstanding > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
+          ${totalOutstanding.toFixed(2)}
+        </Text>
+      </View>
+
+      <FlatList
+        data={customers}
+        keyExtractor={(item) => item.id.toString()}
+        renderItem={renderItem}
+        contentContainerStyle={{ paddingBottom: 100 }}
+        ListEmptyComponent={
+          !isLoading ? (
+            <View className="items-center mt-20 gap-4">
+              <Ionicons name="people-outline" size={64} color="#d1d5db" />
+              <Text className="text-gray-400 dark:text-gray-500 text-center px-10">No customers yet. Add your first tab!</Text>
+            </View>
+          ) : null
+        }
+      />
+
+      {/* FAB */}
+      <Link href="/modal" asChild>
+        <Pressable 
+          className="absolute bottom-10 right-8 w-16 h-16 rounded-full items-center justify-center bg-sky-500 shadow-lg shadow-sky-400/50 dark:shadow-sky-900/40"
+          style={{ elevation: 8, zIndex: 1000 }}
+        >
+          <Ionicons name="add" size={32} color="white" />
+        </Pressable>
+      </Link>
+    </View>
   );
 }
-
-const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
-  },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
-  },
-});

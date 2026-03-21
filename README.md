@@ -1,51 +1,53 @@
-# Welcome to your Expo app 👋
+# TabTracker
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+TabTracker is an Expo (SDK 54+) app using Expo Router + NativeWind. It stores customer/tab data locally via SQLite.
 
-## Get started
+## New machine quick start
+### Prerequisites
+- Install Node.js (includes `npm`)
+- Recommended: ensure `npx` can run Expo CLI (`npx expo ...` is used below)
+- If you want Android emulator/device:
+  - Install Android Studio + Android SDK
+  - Ensure `adb` is available in your `PATH`
+  - Set `ANDROID_HOME` to your SDK folder if needed
 
-1. Install dependencies
-
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
+### Install
 ```bash
-npm run reset-project
+npm install
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+### Run
+Generic (choose a target from the Expo prompt):
+```bash
+npx expo start
+```
 
-## Learn more
+Web:
+```bash
+npx expo start --web
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Android:
+```bash
+npx expo start --android
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+Helpful flags:
+- Clear Metro cache: `npx expo start --clear`
+- If port `8081` is busy: `npx expo start --port 8082`
 
-## Join the community
+## Troubleshooting
+- If Android fails with SDK/`adb` errors:
+  - Install Android SDK/Platform Tools in Android Studio
+  - Set `ANDROID_HOME`
+  - Ensure `platform-tools` (where `adb` lives) is on `PATH`
+- If you see unexpected Metro/Babel bundling errors:
+  - rerun with `--clear` (this often fixes it)
 
-Join our community of developers creating universal apps.
+## Useful dev commands
+- Lint: `npm run lint`
+- Typecheck: `npx tsc -p tsconfig.json --noEmit`
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
-"# TabTracker" 
+## App routes
+- Dashboard: `/(tabs)/index`
+- Add/Edit customer modal: `/modal`
