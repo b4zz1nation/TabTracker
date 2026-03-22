@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import { Pressable, Text, TextInput, View } from 'react-native';
 import { useRouter } from 'expo-router';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 
 import { saveUserProfile } from '@/services/user-profile';
 import { useAuth } from '@/contexts/auth-context';
@@ -40,11 +39,7 @@ export default function WelcomeScreen() {
   };
 
   return (
-<<<<<<< HEAD
     <ScreenContainer centerContent scrollViewRef={scrollViewRef}>
-=======
-    <ScreenContainer centerContent>
->>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
       <View className="px-6">
         <View className="mb-10 items-center">
           <Text className="text-4xl font-extrabold text-sky-600 dark:text-sky-400">TabTracker</Text>

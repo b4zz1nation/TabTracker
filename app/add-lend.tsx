@@ -1,12 +1,5 @@
-<<<<<<< HEAD
 import { useEffect, useRef, useState } from 'react';
 import { TextInput, Pressable, View, Alert, Text, Switch, TouchableOpacity } from 'react-native';
-=======
-import { useEffect, useState } from 'react';
-import { TextInput, Pressable, View, Alert, KeyboardAvoidingView, Platform, Text, Switch, TouchableOpacity } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
-import { SafeAreaView } from 'react-native-safe-area-context';
->>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -95,23 +88,12 @@ export default function AddLendScreen() {
     }
   };
 
-<<<<<<< HEAD
   const header = (
     <View className="flex-row items-center justify-between px-2 py-3">
         <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6} className="w-12 h-12 items-center justify-center">
             <Ionicons name="chevron-back" size={28} color={colorScheme === 'dark' ? '#ffffff' : '#1f2937'} />
         </TouchableOpacity>
         <Text className="text-xl font-bold text-gray-900 dark:text-gray-100 italic">
-=======
-  return (
-    <SheetScreen onClose={() => router.back()} dragDirections={{ toBottom: true, toTop: false, toLeft: false, toRight: false }} opacityOnGestureMove={true} containerRadiusSync={true}>
-        <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={['top', 'left', 'right']}>
-          <KeyboardAwareScrollView className="flex-1 bg-gray-50 dark:bg-gray-950" contentContainerStyle={{ flexGrow: 1, padding: 24, paddingBottom: 40 }} keyboardShouldPersistTaps="handled" enableOnAndroid={true} extraScrollHeight={80} showsVerticalScrollIndicator={false}>
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6} className="w-11 h-11 items-center justify-center -ml-2 mb-2">
-            <Ionicons name="close" size={28} color={colorScheme === 'dark' ? '#ffffff' : '#1f2937'} />
-          </TouchableOpacity>
-          <Text className="text-3xl font-bold text-gray-900 dark:text-gray-100 mb-1">
->>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
             {isEditing ? 'Edit Lend' : 'New Lend'}
         </Text>
         <View className="w-12" />
@@ -174,7 +156,6 @@ export default function AddLendScreen() {
               </View>
             </View>
 
-<<<<<<< HEAD
             <View>
               <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Frequency</Text>
               <View className="flex-row gap-2">
@@ -193,17 +174,5 @@ export default function AddLendScreen() {
         )}
       </View>
     </ScreenContainer>
-=======
-        <Pressable
-          className={`h-16 rounded-2xl items-center justify-center shadow-lg shadow-sky-500/30 mb-8 ${isSaving ? 'bg-sky-400' : 'bg-sky-500 active:opacity-90 active:scale-[0.98]'}`}
-          onPress={handleSave} disabled={isSaving}
-        >
-          <Text className="text-white text-lg font-bold">{isSaving ? 'Saving...' : isEditing ? 'Update Lend' : 'Add Lend'}</Text>
-        </Pressable>
-        <View className="pb-10" />
-        </KeyboardAwareScrollView>
-      </SafeAreaView>
-    </SheetScreen>
->>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
   );
 }
