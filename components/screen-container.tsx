@@ -13,6 +13,7 @@ interface ScreenContainerProps {
   scrollViewRef?: React.RefObject<any>;
   header?: React.ReactNode;
   footer?: React.ReactNode;
+  extraHeight?: number;
 }
 
 /**
@@ -27,6 +28,7 @@ export default function ScreenContainer({
   scrollViewRef,
   header,
   footer,
+  extraHeight = 140,
 }: ScreenContainerProps) {
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={edges}>
@@ -53,7 +55,7 @@ export default function ScreenContainer({
               keyboardShouldPersistTaps="handled"
               enableOnAndroid={false}
               enableAutomaticScroll={true}
-              extraHeight={140}
+              extraHeight={extraHeight}
               extraScrollHeight={0}
               showsVerticalScrollIndicator={false}
               bounces={true}

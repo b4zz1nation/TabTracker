@@ -168,7 +168,7 @@ export default function ModalScreen() {
       <View className="mb-8">
         <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Starting Balance</Text>
         <View className="flex-row items-center bg-gray-50 dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 px-4">
-          <Text className="text-2xl font-bold text-gray-400 mr-2">$</Text>
+          <Text className="text-2xl font-bold text-gray-400 mr-2">₱</Text>
           <TextInput
             className="flex-1 h-16 text-3xl font-bold text-gray-900 dark:text-gray-100"
             placeholder="0.00"

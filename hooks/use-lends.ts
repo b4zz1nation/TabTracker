@@ -9,6 +9,7 @@ export interface Lend {
   interest_rate: number;
   interest_type: 'Daily' | 'Monthly' | 'Yearly' | null;
   status: 'Ongoing' | 'Completed';
+  description?: string | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -37,11 +38,13 @@ export function useLends() {
     amount: number,
     interestEnabled: boolean = false,
     interestRate: number = 0,
-    interestType: 'Daily' | 'Monthly' | 'Yearly' | null = null
+    interestType: 'Daily' | 'Monthly' | 'Yearly' | null = null,
+    description: string | null = null
   ) => {
+    const now = new Date().toISOString();
     await db.runAsync(
-      'INSERT INTO lends (customer_id, amount, interest_enabled, interest_rate, interest_type) VALUES (?, ?, ?, ?, ?)',
-      [customerId, amount, interestEnabled ? 1 : 0, interestRate, interestType]
+      'INSERT INTO lends (customer_id, amount, interest_enabled, interest_rate, interest_type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [customerId, amount, interestEnabled ? 1 : 0, interestRate, interestType, description, now]
     );
     await fetchAllLends();
   };
@@ -51,19 +54,21 @@ export function useLends() {
     amount: number,
     interestEnabled: boolean = false,
     interestRate: number = 0,
-    interestType: 'Daily' | 'Monthly' | 'Yearly' | null = null
+    interestType: 'Daily' | 'Monthly' | 'Yearly' | null = null,
+    description: string | null = null
   ) => {
     await db.runAsync(
-      'UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, interest_type = ? WHERE id = ?',
-      [amount, interestEnabled ? 1 : 0, interestRate, interestType, id]
+      'UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, description = ? WHERE id = ?',
+      [amount, interestEnabled ? 1 : 0, interestRate, interestType, description, id]
     );
     await fetchAllLends();
   };
 
   const completeLend = async (id: number) => {
+    const now = new Date().toISOString();
     await db.runAsync(
-      "UPDATE lends SET status = 'Completed', completed_at = CURRENT_TIMESTAMP WHERE id = ?",
-      [id]
+      "UPDATE lends SET status = 'Completed', completed_at = ? WHERE id = ?",
+      [now, id]
     );
     await fetchAllLends();
   };

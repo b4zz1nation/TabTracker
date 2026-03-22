@@ -25,7 +25,7 @@ export default function LendDetailsScreen() {
     if (!lend) return null;
     
     const start = new Date(lend.created_at);
-    const now = new Date();
+    const now = lend.status === 'Completed' && lend.completed_at ? new Date(lend.completed_at) : new Date();
     const diff = now.getTime() - start.getTime();
     const dayMs = 1000 * 60 * 60 * 24;
     
@@ -76,16 +76,18 @@ export default function LendDetailsScreen() {
 
   return (
     <ScreenContainer header={header} edges={['top', 'bottom']} centerContent={true} scrollable={false}>
-      <View className="bg-white dark:bg-gray-900 rounded-[32px] p-8 mx-6 shadow-2xl border border-gray-100 dark:border-gray-800 mb-12">
-        <View className="items-center mb-8">
-          <View className="w-20 h-20 rounded-full bg-sky-100 dark:bg-sky-900/30 items-center justify-center mb-4">
-            <Ionicons name="pulse" size={40} color="#0ea5e9" />
+      <View className="bg-white dark:bg-gray-900 rounded-[32px] p-6 mx-6 shadow-2xl border border-gray-100 dark:border-gray-800 mb-8">
+        <View className="items-center mb-6">
+          <View className={`w-16 h-16 rounded-full ${lend.status === 'Completed' ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-sky-100 dark:bg-sky-900/30'} items-center justify-center mb-3`}>
+            <Ionicons name={lend.status === 'Completed' ? 'checkmark-done' : 'pulse'} size={32} color={lend.status === 'Completed' ? '#10b981' : '#0ea5e9'} />
           </View>
-          <Text className="text-xs text-sky-500 font-black uppercase tracking-[4px] mb-1">Accumulating Now</Text>
+          <Text className={`text-[10px] ${lend.status === 'Completed' ? 'text-emerald-500' : 'text-sky-500'} font-black uppercase tracking-[4px] mb-1`}>
+            {lend.status === 'Completed' ? 'Final Snapshot' : 'Accumulating Now'}
+          </Text>
           <Text className="text-lg font-bold text-gray-900 dark:text-gray-100">{customer?.name}</Text>
         </View>
 
-        <View className="border-t border-b border-dashed border-gray-200 dark:border-gray-800 py-6 my-2 gap-5">
+        <View className="border-t border-b border-dashed border-gray-200 dark:border-gray-800 py-4 my-1 gap-4">
           <View className="flex-row justify-between">
             <Text className="text-gray-400 dark:text-gray-500 font-medium">Principal</Text>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">₱{lend.amount.toFixed(2)}</Text>
@@ -94,7 +96,7 @@ export default function LendDetailsScreen() {
           <View className="flex-row justify-between">
             <View>
               <Text className="text-gray-400 dark:text-gray-500 font-medium">Agreement</Text>
-              <Text className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{lend.interest_type}</Text>
+              <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{lend.interest_type}</Text>
             </View>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">{lend.interest_rate}%</Text>
           </View>
@@ -102,7 +104,7 @@ export default function LendDetailsScreen() {
           <View className="flex-row justify-between">
             <View>
               <Text className="text-gray-400 dark:text-gray-500 font-medium">Duration</Text>
-              <Text className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">{stats.daysElapsed} days total</Text>
+              <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">{stats.daysElapsed} days total</Text>
             </View>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">{stats.label}</Text>
           </View>
@@ -113,13 +115,24 @@ export default function LendDetailsScreen() {
           </View>
         </View>
 
-        <View className="mt-8 items-center">
-            <Text className="text-gray-400 dark:text-gray-500 uppercase text-[10px] font-black tracking-[4px] mb-2 text-center">Current Balance (if settled now)</Text>
-            <Text className="text-5xl font-black text-gray-900 dark:text-gray-100">₱{stats.total.toFixed(2)}</Text>
+        <View className="mt-6 items-center">
+            <Text className="text-gray-400 dark:text-gray-500 uppercase text-[9px] font-black tracking-[4px] mb-2 text-center leading-4">
+              {lend.status === 'Completed' ? 'Total Amount\nSettled' : 'Current Balance\n(if settled now)'}
+            </Text>
+            <Text className="text-4xl font-black text-gray-900 dark:text-gray-100">₱{stats.total.toFixed(2)}</Text>
         </View>
+
+        {lend.description ? (
+          <View className="mt-4 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-800">
+            <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1 ml-1">Description</Text>
+            <Text className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed italic">
+              "{lend.description}"
+            </Text>
+          </View>
+        ) : null}
         
-        <View className="mt-6">
-            <Text className="text-[10px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">
+        <View className="mt-4">
+            <Text className="text-[9px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">
               Started {new Date(lend.created_at).toLocaleDateString()}
             </Text>
         </View>

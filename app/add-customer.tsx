@@ -26,11 +26,12 @@ export default function AddCustomerScreen() {
   const [interestEnabled, setInterestEnabled] = useState(false);
   const [interestRate, setInterestRate] = useState('');
   const [interestType, setInterestType] = useState<'Daily' | 'Monthly' | 'Yearly'>('Monthly');
+  const [description, setDescription] = useState('');
   const [isSaving, setIsSaving] = useState(false);
   const scrollViewRef = useRef<any>(null);
   const interestInputRef = useRef<TextInput>(null);
  
-  const [errors, setErrors] = useState<{ name?: boolean; amount?: boolean }>({});
+  const [errors, setErrors] = useState<{ name?: boolean; amount?: boolean; interest?: boolean }>({});
   const [isDuplicate, setIsDuplicate] = useState(false);
 
   const handleToggleInterest = (val: boolean) => {
@@ -87,6 +88,7 @@ export default function AddCustomerScreen() {
         setInterestRate(lend.interest_rate?.toString() || '');
         setInterestType(lend.interest_type || 'Monthly');
         setDates({ start: lend.created_at, end: lend.completed_at });
+        setDescription(lend.description || '');
         
         db.getFirstAsync<{ name: string }>('SELECT name FROM customers WHERE id = ?', [lend.customer_id]).then(res => {
           if (res) setName(res.name);
@@ -127,24 +129,33 @@ export default function AddCustomerScreen() {
           return;
         }
       }
+
+      if (interestEnabled) {
+        const numRate = parseFloat(interestRate);
+        if (isNaN(numRate) || numRate <= 0) {
+          setErrors(prev => ({ ...prev, interest: true }));
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          return;
+        }
+      }
  
       setIsSaving(true);
       if (isEditing) {
         await db.runAsync(
-          'UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, interest_type = ? WHERE id = ?',
-          [numAmount, interestEnabled ? 1 : 0, parseFloat(interestRate), interestType, Number(lendId)]
+          'UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, description = ? WHERE id = ?',
+          [numAmount, interestEnabled ? 1 : 0, parseFloat(interestRate), interestType, description || null, Number(lendId)]
         );
       } else if (customerId) {
           await db.runAsync(
-            'INSERT INTO lends (customer_id, amount, status, interest_enabled, interest_rate, interest_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-            [Number(customerId), numAmount, 'Ongoing', interestEnabled ? 1 : 0, parseFloat(interestRate), interestType, new Date().toISOString()]
+            'INSERT INTO lends (customer_id, amount, status, interest_enabled, interest_rate, interest_type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+            [Number(customerId), numAmount, 'Ongoing', interestEnabled ? 1 : 0, parseFloat(interestRate), interestType, description || null, new Date().toISOString()]
           );
       } else {
         const result = await db.runAsync('INSERT INTO customers (name, balance) VALUES (?, ?)', [trimmedName, numAmount]);
         const newCustomerId = result.lastInsertRowId;
         await db.runAsync(
-          'INSERT INTO lends (customer_id, amount, status, interest_enabled, interest_rate, interest_type, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [newCustomerId, numAmount, 'Ongoing', interestEnabled ? 1 : 0, parseFloat(interestRate), interestType, new Date().toISOString()]
+          'INSERT INTO lends (customer_id, amount, status, interest_enabled, interest_rate, interest_type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+          [newCustomerId, numAmount, 'Ongoing', interestEnabled ? 1 : 0, parseFloat(interestRate), interestType, description || null, new Date().toISOString()]
         );
       }
 
@@ -242,6 +253,15 @@ export default function AddCustomerScreen() {
             </View>
           </View>
 
+          {isEditing && lends.find(l => l.id === Number(lendId))?.description && (
+            <View className="mt-4 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+              <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1.5 ml-1">Description</Text>
+              <Text className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic">
+                "{lends.find(l => l.id === Number(lendId))?.description}"
+              </Text>
+            </View>
+          )}
+
           <View className="py-4 gap-3">
             <View className="flex-row justify-between items-center">
               <View>
@@ -316,6 +336,26 @@ export default function AddCustomerScreen() {
             />
             </View>
         </View>
+        
+        {!isReadOnly && (
+          <View className="mb-6">
+            <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Description (Optional)</Text>
+            <View className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-4 py-3 shadow-sm min-h-[100px]">
+              <TextInput
+                className="text-lg text-gray-900 dark:text-gray-100 min-h-[80px]"
+                placeholder="What's this for?" placeholderTextColor="#9ca3af"
+                value={description} onChangeText={setDescription}
+                onFocus={(event) => handleFocus(event.target)}
+                multiline={true}
+                textAlignVertical="top"
+                maxLength={100}
+              />
+              <Text className="text-[10px] text-gray-400 dark:text-gray-500 text-right mt-1">
+                {description.length}/100
+              </Text>
+            </View>
+          </View>
+        )}
 
         <View className="mb-0 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">
             <View className="flex-row items-center justify-between mb-6">
@@ -337,11 +377,14 @@ export default function AddCustomerScreen() {
             {interestEnabled && name.trim() && amount.trim() && (
             <View className="gap-6">
               <View>
-                <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Interest Rate</Text>
-                <View className="flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-4 shadow-sm">
+                <View className="flex-row items-center justify-between mb-2 ml-1">
+                  <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">Interest Rate</Text>
+                  {errors.interest && <Text className="text-[10px] text-red-500 font-black uppercase italic mr-1">Invalid Interest!</Text>}
+                </View>
+                <View className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${errors.interest ? 'border-red-500 bg-red-50/50 dark:bg-red-950/20' : 'border-gray-200 dark:border-gray-800'} px-4 shadow-sm`}>
                    <TextInput 
                      ref={interestInputRef}
-                     className="flex-1 h-14 text-2xl font-bold text-gray-900 dark:text-gray-100" placeholder="0" placeholderTextColor="#9ca3af" value={interestRate} onChangeText={handleRateChange} onFocus={(event) => handleFocus(event.target, 300)} keyboardType="numeric" editable={!isReadOnly} 
+                     className="flex-1 h-14 text-2xl font-bold text-gray-900 dark:text-gray-100" placeholder="0" placeholderTextColor="#9ca3af" value={interestRate} onChangeText={(t) => { handleRateChange(t); setErrors(prev => ({ ...prev, interest: false })); }} onFocus={(event) => handleFocus(event.target, 300)} keyboardType="numeric" editable={!isReadOnly} 
                    />
                   <Text className="text-xl font-bold text-gray-400 dark:text-gray-500 ml-2">%</Text>
                 </View>

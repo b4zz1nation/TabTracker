@@ -1,82 +1,349 @@
-import { useRef, useState } from 'react';
-import { Pressable, Text, TextInput, View } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Dimensions,
+  KeyboardAvoidingView,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
 import { saveUserProfile } from '@/services/user-profile';
-import { useAuth } from '@/contexts/auth-context';
-import ScreenContainer from '@/components/screen-container';
 
-export default function WelcomeScreen() {
-  const router = useRouter();
-  const { markProfileReady } = useAuth();
+const { width } = Dimensions.get('window');
+const TOTAL_SLIDES = 4;
+
+/* ─────────────────────────────────────────
+   Individual slides — plain components,
+   no hooks, no navigation, no router refs.
+───────────────────────────────────────── */
+
+const LogoSlide = React.memo(() => (
+  <View style={styles.slide} className="px-8 justify-center items-center">
+    <View className="w-32 h-32 bg-sky-100 dark:bg-sky-900/30 rounded-[48px] items-center justify-center mb-10 shadow-sm">
+      <Ionicons name="layers" size={64} color="#0ea5e9" />
+    </View>
+    <Text className="text-6xl font-black text-gray-900 dark:text-gray-100 tracking-tighter text-center">
+      TabTracker
+    </Text>
+    <Text className="mt-4 text-lg text-gray-400 dark:text-gray-500 font-medium text-center px-10">
+      Simplifying shared expenses.
+    </Text>
+  </View>
+));
+
+const FeaturesSlide = React.memo(() => (
+  <View style={styles.slide} className="px-8 justify-center">
+    <View className="items-center mb-12">
+      <View className="w-20 h-20 bg-emerald-100 dark:bg-emerald-900/30 rounded-[32px] items-center justify-center mb-6">
+        <Ionicons name="flash" size={40} color="#10b981" />
+      </View>
+      <Text className="text-4xl font-black text-gray-900 dark:text-gray-100 tracking-tighter text-center px-4">
+        Core Features
+      </Text>
+      <Text className="mt-2 text-gray-400 dark:text-gray-500 font-medium">What makes us special.</Text>
+    </View>
+    <View className="gap-6">
+      <View className="flex-row items-center bg-white dark:bg-gray-900 p-6 rounded-[32px] border border-gray-100 dark:border-gray-800 shadow-sm">
+        <View className="w-14 h-14 rounded-2xl bg-sky-50 dark:bg-sky-900/20 items-center justify-center mr-4">
+          <Ionicons name="trending-up" size={32} color="#0ea5e9" />
+        </View>
+        <View className="flex-1">
+          <Text className="text-lg font-bold text-gray-900 dark:text-gray-100">Smart Interest</Text>
+          <Text className="text-sm text-gray-400 dark:text-gray-500 leading-tight">
+            Daily, Monthly, or Yearly. Real-time accumulation.
+          </Text>
+        </View>
+      </View>
+      <View className="flex-row items-center bg-white dark:bg-gray-900 p-6 rounded-[32px] border border-gray-100 dark:border-gray-800 shadow-sm">
+        <View className="w-14 h-14 rounded-2xl bg-violet-50 dark:bg-violet-900/20 items-center justify-center mr-4">
+          <Ionicons name="people" size={32} color="#8b5cf6" />
+        </View>
+        <View className="flex-1">
+          <Text className="text-lg font-bold text-gray-900 dark:text-gray-100">Customer Profiles</Text>
+          <Text className="text-sm text-gray-400 dark:text-gray-500 leading-tight">
+            Track multiple lends for every person in one place.
+          </Text>
+        </View>
+      </View>
+    </View>
+  </View>
+));
+
+const TILES = [
+  { icon: 'home', label: 'Home', desc: 'Active tabs', color: '#0ea5e9' },
+  { icon: 'notifications', label: 'Alerts', desc: 'Updates', color: '#f59e0b' },
+  { icon: 'add-circle', label: 'Quick Add', desc: 'New entry', color: '#10b981' },
+  { icon: 'journal', label: 'Logs', desc: 'History', color: '#8b5cf6' },
+];
+
+const TutorialSlide = React.memo(() => (
+  <View style={styles.slide} className="px-8 justify-center">
+    <Text className="text-4xl font-black text-gray-900 dark:text-gray-100 tracking-tighter text-center mb-4">
+      Navigations
+    </Text>
+    <Text className="mt-2 text-gray-400 dark:text-gray-500 font-medium text-center mb-10">
+      Everything you need, at your fingertips.
+    </Text>
+    <View className="flex-row flex-wrap justify-between gap-4">
+      {TILES.map((t, i) => (
+        <View
+          key={i}
+          className="w-[47%] bg-white dark:bg-gray-900 p-6 rounded-[40px] border border-gray-100 dark:border-gray-800 shadow-sm items-center"
+        >
+          <View
+            style={{ backgroundColor: t.color + '20' }}
+            className="w-16 h-16 rounded-3xl items-center justify-center mb-3"
+          >
+            <Ionicons name={t.icon as any} size={32} color={t.color} />
+          </View>
+          <Text className="text-base font-black text-gray-900 dark:text-gray-100 mb-1">{t.label}</Text>
+          <Text className="text-[10px] text-gray-400 dark:text-gray-500 text-center font-bold px-1">
+            {t.desc}
+          </Text>
+        </View>
+      ))}
+    </View>
+  </View>
+));
+
+/* ─────────────────────────────────────────
+   Name slide — self-contained, no router
+   at render time. Navigation only happens
+   inside the async handler on button press.
+───────────────────────────────────────── */
+interface NameSlideProps {
+  onDone: () => void;
+}
+
+const NameSlide = React.memo(({ onDone }: NameSlideProps) => {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
-  const scrollViewRef = useRef<any>(null);
 
-  const handleFocus = (reactNode: any) => {
-    scrollViewRef.current?.scrollToFocusedInput(reactNode);
-  };
-
-  const handleStart = async () => {
+  const handleComplete = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('Please enter your name to continue.');
+      setError('Please enter your name.');
       return;
     }
-
     try {
       setIsSaving(true);
       await saveUserProfile(trimmed);
-      setError('');
-      markProfileReady();
-      router.replace('/(tabs)');
-    } catch {
-      setError('Could not save your profile. Please try again.');
-    } finally {
+      // Signal parent to handle navigation — keeps all nav code out of this component
+      onDone();
+    } catch (err) {
+      console.error(err);
+      setError('Something went wrong. Try again.');
       setIsSaving(false);
     }
   };
 
   return (
-    <ScreenContainer centerContent scrollViewRef={scrollViewRef}>
-      <View className="px-6">
-        <View className="mb-10 items-center">
-          <Text className="text-4xl font-extrabold text-sky-600 dark:text-sky-400">TabTracker</Text>
-          <Text className="mt-2 text-sm text-gray-500 dark:text-gray-400">Track balances in seconds</Text>
+    <View style={styles.slide} className="px-10 justify-center">
+      <View className="items-center mb-10">
+        <View className="w-24 h-24 bg-sky-100 dark:bg-sky-900/40 rounded-[40px] items-center justify-center mb-6 shadow-sm">
+          <Ionicons name="person" size={48} color="#0ea5e9" />
         </View>
-
-        <View className="mb-4">
-          <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Your Name</Text>
-          <TextInput
-            className="h-14 px-4 rounded-2xl border border-gray-200 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900 text-lg text-gray-900 dark:text-gray-100"
-            placeholder="Enter your name"
-            placeholderTextColor="#9ca3af"
-            value={name}
-            onChangeText={(text) => {
-              setName(text);
-              if (error && text.trim()) {
-                setError('');
-              }
-            }}
-            onFocus={(event) => handleFocus(event.target)}
-            autoFocus
-            returnKeyType="done"
-            onSubmitEditing={handleStart}
-          />
-        </View>
-
-        {error ? <Text className="text-rose-500 dark:text-rose-400 mb-4 ml-1">{error}</Text> : null}
-
-        <Pressable
-          className={`h-14 rounded-2xl items-center justify-center ${
-            isSaving ? 'bg-sky-400' : 'bg-sky-500 active:opacity-90 active:scale-[0.98]'
-          }`}
-          onPress={handleStart}
-          disabled={isSaving}>
-          <Text className="text-white text-lg font-bold">{isSaving ? 'Saving...' : 'Get Started'}</Text>
-        </Pressable>
+        <Text className="text-4xl font-black text-gray-900 dark:text-gray-100 tracking-tighter text-center">
+          Lastly, your name.
+        </Text>
+        <Text className="mt-4 text-base text-gray-400 dark:text-gray-500 font-medium text-center">
+          To simplify things, we just need a name.
+        </Text>
       </View>
-    </ScreenContainer>
+
+      <View>
+        <TextInput
+          style={styles.nameInput}
+          className="text-4xl font-black text-gray-900 dark:text-gray-100 text-center"
+          placeholder="name"
+          placeholderTextColor="#d1d5db"
+          autoCapitalize="words"
+          returnKeyType="done"
+          value={name}
+          onChangeText={(text) => {
+            setName(text);
+            if (error) setError('');
+          }}
+          onSubmitEditing={handleComplete}
+        />
+        <View style={styles.underline} />
+
+        {!!error && (
+          <Text className="text-[10px] text-rose-500 font-black uppercase italic mt-4 text-center">
+            {error}
+          </Text>
+        )}
+
+        <View className="mt-6">
+          <Pressable
+            style={styles.confirmButton}
+            className={
+              isSaving || !name.trim()
+                ? 'bg-gray-100 dark:bg-gray-800/50'
+                : 'bg-sky-500 active:opacity-90'
+            }
+            onPress={handleComplete}
+            disabled={isSaving || !name.trim()}
+          >
+            <Text
+              className={`text-xl font-black tracking-wide ${!name.trim() ? 'text-gray-300' : 'text-white'
+                }`}
+            >
+              {isSaving ? 'Finishing...' : 'Confirm & Start'}
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+});
+
+/* ─────────────────────────────────────────
+   Main onboarding screen
+───────────────────────────────────────── */
+export default function OnboardingScreen() {
+  const scrollRef = useRef<ScrollView>(null);
+  const scrollX = useRef(new Animated.Value(0)).current;
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [showNextButton, setShowNextButton] = useState(false);
+  const nextButtonOpacity = useRef(new Animated.Value(0)).current;
+
+  // 2-second delay on first slide before showing the Next button
+  useEffect(() => {
+    if (activeIndex === 0) {
+      setShowNextButton(false);
+      nextButtonOpacity.setValue(0);
+      const t = setTimeout(() => {
+        setShowNextButton(true);
+        Animated.timing(nextButtonOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }).start();
+      }, 2000);
+      return () => clearTimeout(t);
+    }
+    setShowNextButton(true);
+    nextButtonOpacity.setValue(1);
+  }, [activeIndex]);
+
+  const goTo = useCallback((index: number) => {
+    scrollRef.current?.scrollTo({ x: index * width, animated: true });
+    setActiveIndex(index);
+  }, []);
+
+  const handleNext = useCallback(() => {
+    if (activeIndex < TOTAL_SLIDES - 1) goTo(activeIndex + 1);
+  }, [activeIndex, goTo]);
+
+  // Called by NameSlide when save is complete — navigation happens here
+  // where the navigation context is guaranteed to be alive.
+  const handleDone = useCallback(async () => {
+    // Dynamically import router so it's never touched at render time
+    const { router } = await import('expo-router');
+    router.replace('/(tabs)');
+  }, []);
+
+  return (
+    <SafeAreaView style={styles.container} className="bg-gray-50 dark:bg-gray-950">
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.flex}
+      >
+        {/* Slides rendered once, never remounted */}
+        <Animated.ScrollView
+          ref={scrollRef}
+          horizontal
+          pagingEnabled
+          scrollEventThrottle={16}
+          showsHorizontalScrollIndicator={false}
+          onScroll={Animated.event(
+            [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+            {
+              useNativeDriver: false,
+              listener: (e: any) => {
+                const idx = Math.round(e.nativeEvent.contentOffset.x / width);
+                if (idx !== activeIndex) setActiveIndex(idx);
+              },
+            }
+          )}
+          style={styles.flex}
+        >
+          <LogoSlide />
+          <FeaturesSlide />
+          <TutorialSlide />
+          <NameSlide onDone={handleDone} />
+        </Animated.ScrollView>
+
+        {/* Footer: dots + next button */}
+        <View style={styles.footer}>
+          {/* Progress dots */}
+          <View style={styles.dots}>
+            {Array.from({ length: TOTAL_SLIDES }).map((_, i) => {
+              const dotOpacity = scrollX.interpolate({
+                inputRange: [(i - 1) * width, i * width, (i + 1) * width],
+                outputRange: [0.3, 1, 0.3],
+                extrapolate: 'clamp',
+              });
+              const dotWidth = scrollX.interpolate({
+                inputRange: [(i - 1) * width, i * width, (i + 1) * width],
+                outputRange: [8, 24, 8],
+                extrapolate: 'clamp',
+              });
+              return (
+                <Animated.View
+                  key={i}
+                  style={[styles.dot, { opacity: dotOpacity, width: dotWidth }]}
+                />
+              );
+            })}
+          </View>
+
+          {/* Next button — hidden on last slide */}
+          {activeIndex < TOTAL_SLIDES - 1 && showNextButton && (
+            <Animated.View style={{ opacity: nextButtonOpacity, width: '100%' }}>
+              <Pressable style={styles.nextButton} onPress={handleNext} className="active:opacity-80">
+                <Text className="text-white text-lg font-black mr-2">Next Step</Text>
+                <Ionicons name="arrow-forward" size={20} color="white" />
+              </Pressable>
+            </Animated.View>
+          )}
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
+
+const styles = StyleSheet.create({
+  container: { flex: 1 },
+  flex: { flex: 1 },
+  slide: { width, flex: 1 },
+  nameInput: { height: 96, paddingHorizontal: 24 },
+  underline: { height: 2, backgroundColor: '#0ea5e9', borderRadius: 4, opacity: 0.2, marginBottom: 24 },
+  confirmButton: { height: 80, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
+  footer: { paddingHorizontal: 40, paddingBottom: 48, alignItems: 'center' },
+  dots: { flexDirection: 'row', marginBottom: 32 },
+  dot: { height: 6, borderRadius: 3, backgroundColor: '#0ea5e9', marginRight: 8 },
+  nextButton: {
+    width: '100%',
+    height: 64,
+    backgroundColor: '#0ea5e9',
+    borderRadius: 24,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    shadowColor: '#0ea5e9',
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 6,
+  },
+});

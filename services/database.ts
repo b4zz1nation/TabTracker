@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
-  const DATABASE_VERSION = 3;
+  const DATABASE_VERSION = 4;
   let result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let currentDbVersion = result?.user_version ?? 0;
 
@@ -72,6 +72,16 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
     }
 
     currentDbVersion = 3;
+  }
+
+  if (currentDbVersion < 4) {
+    const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(lends)');
+    const columnNames = new Set(columns.map((col) => col.name));
+
+    if (!columnNames.has('description')) {
+      await db.execAsync('ALTER TABLE lends ADD COLUMN description TEXT DEFAULT NULL;');
+    }
+    currentDbVersion = 4;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

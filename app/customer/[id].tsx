@@ -182,7 +182,7 @@ export default function CustomerDetailScreen() {
     const hasInterest = item.interest_enabled === 1 && item.interest_type;
     
     return (
-      <View className="rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 shadow-sm overflow-hidden border border-gray-100 dark:border-gray-800">
+      <View className={`rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 shadow-sm overflow-hidden border border-gray-100 dark:border-gray-800 ${done ? 'opacity-70' : ''}`}>
         <Pressable
           onPress={() => { 
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
@@ -200,26 +200,42 @@ export default function CustomerDetailScreen() {
             }
           }}
           onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); openDeleteModal(item.id); }}
-          className={`w-full flex-row items-center justify-between p-4 active:opacity-70 ${done ? 'bg-gray-50 dark:bg-gray-900 opacity-60' : 'bg-white dark:bg-gray-900'}`}
+          className={`w-full flex-row items-center justify-between active:opacity-70 ${done ? 'bg-gray-50 dark:bg-gray-900/50 p-3' : 'bg-white dark:bg-gray-900 p-4'}`}
           delayLongPress={500}
         >
           <View className="flex-1 mr-3">
-            <Text className={`text-base font-semibold ${done ? 'text-gray-400 dark:text-gray-600 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
-              ₱{item.amount.toFixed(2)}
-            </Text>
-            {hasInterest ? (
+            <View className="flex-row items-center">
+              <Text className={`${done ? 'text-sm' : 'text-base'} font-bold ${done ? 'text-gray-400 dark:text-gray-600 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
+                ₱{item.amount.toFixed(2)}
+              </Text>
+              {done && item.description && (
+                <Text className="text-[10px] text-gray-400 dark:text-gray-500 italic ml-2 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md" numberOfLines={1}>
+                  "{item.description}"
+                </Text>
+              )}
+            </View>
+
+            {!done && hasInterest && (
               <View className="self-start mt-1 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40">
                 <Text className="text-[11px] font-semibold text-sky-700 dark:text-sky-300">
                   {item.interest_rate}% / {freqShort[item.interest_type!] ?? item.interest_type}
                 </Text>
               </View>
-            ) : null}
-            <Text className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+            )}
+
+            {!done && item.description && (
+              <Text className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic" numberOfLines={1}>
+                "{item.description}"
+              </Text>
+            )}
+
+            <Text className={`${done ? 'text-[9px]' : 'text-xs'} text-gray-400 dark:text-gray-500 mt-0.5`}>
               {new Date(item.created_at).toLocaleDateString()}
             </Text>
           </View>
-          <View className={`px-2.5 py-1 rounded-full ${done ? 'bg-emerald-100 dark:bg-emerald-900/30' : 'bg-sky-100 dark:bg-sky-900/30'}`}>
-            <Text className={`text-[11px] font-semibold ${done ? 'text-emerald-600 dark:text-emerald-400' : 'text-sky-600 dark:text-sky-400'}`}>
+
+          <View className={`px-2.5 py-1 rounded-full ${done ? 'bg-emerald-100/50 dark:bg-emerald-900/20' : 'bg-sky-100 dark:bg-sky-900/30'}`}>
+            <Text className={`text-[10px] font-semibold ${done ? 'text-emerald-500' : 'text-sky-600 dark:text-sky-400'}`}>
               {item.status}
             </Text>
           </View>
