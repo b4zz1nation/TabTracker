@@ -49,7 +49,7 @@ export default function ScreenContainer({
             enableOnAndroid={true}
             enableAutomaticScroll={true}
             extraHeight={140}
-            extraScrollHeight={20}
+            extraScrollHeight={100}
             showsVerticalScrollIndicator={false}
             bounces={true}
           >

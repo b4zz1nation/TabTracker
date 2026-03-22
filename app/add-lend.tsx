@@ -27,8 +27,8 @@ export default function AddLendScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const scrollViewRef = useRef<any>(null);
 
-  const handleFocus = (reactNode: any) => {
-    scrollViewRef.current?.scrollToFocusedInput(reactNode);
+  const handleFocus = (reactNode: any, extraHeight?: number) => {
+    scrollViewRef.current?.scrollToFocusedInput(reactNode, extraHeight);
   };
 
   const handleAmountChange = (text: string) => {
@@ -151,7 +151,7 @@ export default function AddLendScreen() {
             <View>
               <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Interest Rate</Text>
               <View className="flex-row items-center bg-gray-50 dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 px-4">
-                 <TextInput className="flex-1 h-14 text-2xl font-bold text-gray-900 dark:text-gray-100" placeholder="0" placeholderTextColor="#9ca3af" value={interestRate} onChangeText={handleRateChange} onFocus={(event) => handleFocus(event.target)} keyboardType="numeric" />
+                 <TextInput className="flex-1 h-14 text-2xl font-bold text-gray-900 dark:text-gray-100" placeholder="0" placeholderTextColor="#9ca3af" value={interestRate} onChangeText={handleRateChange} onFocus={(event) => handleFocus(event.target, 220)} keyboardType="numeric" />
                 <Text className="text-xl font-bold text-gray-400 dark:text-gray-500 ml-2">%</Text>
               </View>
             </View>
