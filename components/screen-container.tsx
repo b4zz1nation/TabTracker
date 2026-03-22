@@ -1,11 +1,17 @@
 import React from 'react';
+<<<<<<< HEAD
 import { Keyboard, KeyboardAvoidingView, Platform, Pressable, StyleSheet, View, ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
+=======
+import { Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, ViewStyle } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+>>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
 import type { Edge } from 'react-native-safe-area-context';
 
 interface ScreenContainerProps {
   children: React.ReactNode;
+<<<<<<< HEAD
   scrollable?: boolean;
   centerContent?: boolean;
   edges?: Edge[];
@@ -18,6 +24,31 @@ interface ScreenContainerProps {
 
 /**
  * Robust screen container with sticky header, fixed footer, and keyboard-aware content.
+=======
+  /** Wrap content in a ScrollView (default: true). Set to false for screens with FlatList/SectionList. */
+  scrollable?: boolean;
+  /** Center scroll content vertically — useful for single-input screens like Welcome. */
+  centerContent?: boolean;
+  /** SafeAreaView edges to inset (default: ['top']). */
+  edges?: Edge[];
+  /** Extra padding/style for the ScrollView contentContainer. */
+  contentContainerStyle?: ViewStyle;
+  /** Additional offset for KeyboardAvoidingView (e.g. inside modals). */
+  keyboardVerticalOffset?: number;
+}
+
+/**
+ * Global screen wrapper that provides:
+ * - SafeAreaView with dark/light background
+ * - KeyboardAvoidingView (iOS: padding, Android: height)
+ * - Pressable dismiss-keyboard on tap outside inputs
+ * - Optional ScrollView with keyboardShouldPersistTaps="handled"
+ *
+ * Usage:
+ *   <ScreenContainer>
+ *     {/* your screen content *\/}
+ *   </ScreenContainer>
+>>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
  */
 export default function ScreenContainer({
   children,
@@ -25,6 +56,7 @@ export default function ScreenContainer({
   centerContent = false,
   edges = ['top', 'left', 'right'],
   contentContainerStyle,
+<<<<<<< HEAD
   scrollViewRef,
   header,
   footer,
@@ -75,6 +107,38 @@ export default function ScreenContainer({
           </KeyboardAvoidingView>
         )}
       </View>
+=======
+  keyboardVerticalOffset,
+}: ScreenContainerProps) {
+  const offset = keyboardVerticalOffset ?? (Platform.OS === 'ios' ? 0 : 0);
+
+  return (
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={edges}>
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={offset}
+        style={styles.flex}
+      >
+        <Pressable onPress={Keyboard.dismiss} style={styles.flex} accessible={false}>
+          {scrollable ? (
+            <ScrollView
+              contentContainerStyle={[
+                styles.scrollContent,
+                centerContent && styles.center,
+                { paddingBottom: 80 },
+                contentContainerStyle,
+              ]}
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+            >
+              {children}
+            </ScrollView>
+          ) : (
+            children
+          )}
+        </Pressable>
+      </KeyboardAvoidingView>
+>>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
     </SafeAreaView>
   );
 }
@@ -83,10 +147,13 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   center: { justifyContent: 'center' },
+<<<<<<< HEAD
   footerContainer: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
   },
+=======
+>>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
 });

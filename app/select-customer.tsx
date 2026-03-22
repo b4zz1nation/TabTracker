@@ -1,5 +1,10 @@
 import { useState, useCallback } from 'react';
+<<<<<<< HEAD
 import { FlatList, Pressable, TextInput, View, Text, TouchableOpacity } from 'react-native';
+=======
+import { FlatList, KeyboardAvoidingView, Platform, Pressable, TextInput, View, Text, TouchableOpacity } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+>>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -54,7 +59,13 @@ export default function SelectCustomerScreen() {
   );
 
   return (
+<<<<<<< HEAD
     <ScreenContainer scrollable={false} edges={['top', 'bottom']}>
+=======
+    <SheetScreen onClose={() => router.back()} dragDirections={{ toBottom: true, toTop: false, toLeft: false, toRight: false }} opacityOnGestureMove={true} containerRadiusSync={true}>
+    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 40 : 20} style={{ flex: 1 }}>
+    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={['bottom']}>
+>>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
       <View className="flex-1">
         {/* Close Button & Title */}
         <View className="px-4 pt-3 pb-4">
@@ -89,7 +100,11 @@ export default function SelectCustomerScreen() {
           data={filtered}
           keyExtractor={(item) => item.id.toString()}
           renderItem={renderItem}
+<<<<<<< HEAD
           contentContainerStyle={{ paddingBottom: 100 }}
+=======
+          contentContainerStyle={{ paddingBottom: 40 }}
+>>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
           keyboardShouldPersistTaps="handled"
           ListEmptyComponent={
             <View className="items-center mt-20 gap-3">
@@ -101,6 +116,12 @@ export default function SelectCustomerScreen() {
           }
         />
       </View>
+<<<<<<< HEAD
     </ScreenContainer>
+=======
+    </SafeAreaView>
+    </KeyboardAvoidingView>
+    </SheetScreen>
+>>>>>>> 6b90a6326142de73cba4ff628f5373ae566089a0
   );
 }
