@@ -1,24 +1,54 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { FlatList, Pressable, TextInput, View, Text, TouchableOpacity } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 
 import { useCustomers, Customer } from '@/hooks/use-customers';
+import { useLends } from '@/hooks/use-lends';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import ScreenContainer from '@/components/screen-container';
 
 export default function SelectCustomerScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const { customers, refresh } = useCustomers();
+  const { customers, refresh: refreshCustomers } = useCustomers();
+  const { lends, refresh: refreshLends } = useLends();
   const [search, setSearch] = useState('');
 
   useFocusEffect(
     useCallback(() => {
-      refresh();
-    }, [refresh])
+      refreshCustomers();
+      refreshLends();
+    }, [refreshCustomers, refreshLends])
   );
+
+  const customerStats = useMemo(() => {
+    const map: Record<number, { totalOngoing: number; interestBadge: string | null; latestDate: string | null; lendCount: number }> = {};
+    for (const c of customers) {
+      const cLends = lends.filter((l) => l.customer_id === c.id && l.status === 'Ongoing');
+      const total = cLends.reduce((s, l) => s + l.amount, 0);
+      const withInterest = cLends.find((l) => l.interest_enabled === 1 && l.interest_type);
+      const freqShort: Record<string, string> = { Daily: 'day', Monthly: 'mo', Yearly: 'yr' };
+      const badge = withInterest
+        ? `${withInterest.interest_rate}% / ${freqShort[withInterest.interest_type!] ?? withInterest.interest_type}`
+        : null;
+      // Latest lend date
+      const sorted = cLends.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+      const latestDate = sorted.length > 0 ? sorted[0].created_at : null;
+      map[c.id] = { totalOngoing: total, interestBadge: badge, latestDate, lendCount: cLends.length };
+    }
+    return map;
+  }, [customers, lends]);
+
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      'bg-sky-400', 'bg-emerald-400', 'bg-violet-400',
+      'bg-amber-400', 'bg-rose-400', 'bg-teal-400'
+    ];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
 
   const filtered = search.trim()
     ? customers.filter((c) =>
@@ -39,31 +69,60 @@ export default function SelectCustomerScreen() {
     }, 100);
   };
 
-  const renderItem = ({ item }: { item: Customer }) => (
-    <Pressable
-      onPress={() => handleSelect(item)}
-      className="flex-row items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-zinc-800 active:opacity-70 bg-white dark:bg-zinc-950"
-    >
-      <View className="flex-1 mr-3">
-        <Text className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-          {item.name}
+  const header = (
+    <View className="flex-row items-center justify-between px-2 py-3">
+        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6} className="w-12 h-12 items-center justify-center">
+            <Ionicons name="chevron-back" size={28} color={colorScheme === 'dark' ? '#ffffff' : '#1f2937'} />
+        </TouchableOpacity>
+        <Text className="text-xl font-bold text-gray-900 dark:text-gray-100 italic">
+            Select Customer
         </Text>
-      </View>
-      <Ionicons name="chevron-forward" size={16} color="#9ca3af" />
-    </Pressable>
+        <View className="w-12" />
+    </View>
   );
 
-  return (
-    <ScreenContainer scrollable={false} edges={['top', 'bottom']}>
-      <View className="flex-1">
-        {/* Close Button & Title */}
-        <View className="px-4 pt-3 pb-4">
-          <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6} className="w-11 h-11 items-center justify-center -ml-1 mb-2">
-            <Ionicons name="close" size={28} color={colorScheme === 'dark' ? '#ffffff' : '#1f2937'} />
-          </TouchableOpacity>
-          <Text className="text-3xl font-bold text-gray-900 dark:text-gray-100 px-1">Select Customer</Text>
-        </View>
+  const renderItem = ({ item }: { item: Customer }) => {
+    const stats = customerStats[item.id] ?? { totalOngoing: 0, interestBadge: null, latestDate: null, lendCount: 0 };
+    const isPositive = stats.totalOngoing > 0;
+    const amountAbs = Math.abs(stats.totalOngoing).toFixed(2);
+    const avatarColor = getAvatarColor(item.name);
+    const firstChar = item.name.charAt(0).toUpperCase();
 
+    return (
+      <View className="rounded-2xl mx-4 mb-3 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
+        <Pressable
+          onPress={() => handleSelect(item)}
+          className="flex-row items-center p-4 active:opacity-70"
+        >
+          {/* Left — Avatar */}
+          <View className={`w-11 h-11 rounded-full items-center justify-center mr-4 ${avatarColor}`}>
+            <Text className="text-white font-bold text-lg">{firstChar}</Text>
+          </View>
+
+          {/* Center — Name, Reference */}
+          <View className="flex-1 mr-3">
+            <Text className="text-[16px] font-semibold text-gray-900 dark:text-gray-100">{item.name}</Text>
+            <Text className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
+              {stats.lendCount > 0 ? `${stats.lendCount} active lend${stats.lendCount !== 1 ? 's' : ''}` : 'No active lends'}
+              {stats.interestBadge ? `  ·  ${stats.interestBadge}` : ''}
+            </Text>
+          </View>
+
+          {/* Right — Amount */}
+          {stats.totalOngoing !== 0 && (
+            <Text className={`text-[16px] font-bold ${isPositive ? 'text-emerald-500' : 'text-gray-900 dark:text-gray-100'}`}>
+              {isPositive ? '+ ' : ''}{amountAbs} $
+            </Text>
+          )}
+          <Ionicons name="chevron-forward" size={16} color="#d1d5db" className="ml-2" />
+        </Pressable>
+      </View>
+    );
+  };
+
+  return (
+    <ScreenContainer scrollable={false} edges={['top', 'bottom']} header={header}>
+      <View className="flex-1 pt-4">
         {/* Search Bar */}
         <View className="px-4 pb-4">
           <View className="flex-row items-center bg-gray-100 dark:bg-zinc-900 rounded-2xl px-4 h-14">
