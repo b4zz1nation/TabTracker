@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { TextInput, Pressable, View, Alert, Text, Switch, TouchableOpacity } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { TextInput, Pressable, View, Alert, Text, Switch, TouchableOpacity, Animated } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -24,11 +24,46 @@ export default function AddCustomerScreen() {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [interestEnabled, setInterestEnabled] = useState(false);
-  const [interestRate, setInterestRate] = useState('5');
+  const [interestRate, setInterestRate] = useState('');
   const [interestType, setInterestType] = useState<'Daily' | 'Monthly' | 'Yearly'>('Monthly');
   const [isSaving, setIsSaving] = useState(false);
-  const [formError, setFormError] = useState<string | null>(null);
   const scrollViewRef = useRef<any>(null);
+  const interestInputRef = useRef<TextInput>(null);
+ 
+  const [errors, setErrors] = useState<{ name?: boolean; amount?: boolean }>({});
+  const [isDuplicate, setIsDuplicate] = useState(false);
+
+  const handleToggleInterest = (val: boolean) => {
+    setInterestEnabled(val);
+    if (val) {
+      setTimeout(() => {
+        interestInputRef.current?.focus();
+      }, 100);
+    }
+  };
+
+  const [dates, setDates] = useState({ start: '', end: null as string | null });
+
+  const interestAccumulated = useMemo(() => {
+    if (!interestEnabled || !interestRate || !interestType || !dates.start) return 0;
+    const start = new Date(dates.start);
+    const end = dates.end ? new Date(dates.end) : new Date();
+    const diff = end.getTime() - start.getTime();
+    if (diff < 0) return 0;
+
+    let intervals = 0;
+    const dayMs = 1000 * 60 * 60 * 24;
+    if (interestType === 'Daily') {
+      intervals = Math.floor(diff / dayMs);
+    } else if (interestType === 'Monthly') {
+      intervals = Math.floor(diff / (dayMs * 30.4375));
+    } else if (interestType === 'Yearly') {
+      intervals = Math.floor(diff / (dayMs * 365.25));
+    }
+    return (parseFloat(amount) * (parseFloat(interestRate) / 100)) * intervals;
+  }, [amount, interestEnabled, interestRate, interestType, dates]);
+
+  const totalToPay = parseFloat(amount) + interestAccumulated;
 
   const handleFocus = (reactNode: any, extraHeight?: number) => {
     scrollViewRef.current?.scrollToFocusedInput(reactNode, extraHeight);
@@ -49,8 +84,9 @@ export default function AddCustomerScreen() {
       if (lend) {
         setAmount(lend.amount.toString());
         setInterestEnabled(lend.interest_enabled === 1);
-        setInterestRate(lend.interest_rate?.toString() || '5');
+        setInterestRate(lend.interest_rate?.toString() || '');
         setInterestType(lend.interest_type || 'Monthly');
+        setDates({ start: lend.created_at, end: lend.completed_at });
         
         db.getFirstAsync<{ name: string }>('SELECT name FROM customers WHERE id = ?', [lend.customer_id]).then(res => {
           if (res) setName(res.name);
@@ -65,15 +101,33 @@ export default function AddCustomerScreen() {
 
   const handleSave = async () => {
     if (isReadOnly) return;
+    setErrors({});
+    setIsDuplicate(false);
+ 
     const trimmedName = name.trim();
     const numAmount = parseFloat(amount);
 
-    if (!trimmedName || isNaN(numAmount) || numAmount <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid name and amount.');
+    const errs: { name?: boolean; amount?: boolean } = {};
+    if (!trimmedName) errs.name = true;
+    if (isNaN(numAmount) || numAmount <= 0) errs.amount = true;
+ 
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
 
     try {
+      if (!isEditing && !customerId) {
+        const existing = await db.getFirstAsync<{ id: number }>('SELECT id FROM customers WHERE name = ? COLLATE NOCASE', [trimmedName]);
+        if (existing) {
+          setErrors({ name: true });
+          setIsDuplicate(true);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          return;
+        }
+      }
+ 
       setIsSaving(true);
       if (isEditing) {
         await db.runAsync(
@@ -110,10 +164,9 @@ export default function AddCustomerScreen() {
       router.back();
     } catch (error: any) {
       console.error(error);
-      if (error.message === 'DUPLICATE_NAME') {
-        setFormError('A customer with this name already exists.');
-      } else {
-        Alert.alert('Error', 'Failed to save entries. Please try again.');
+      if (error.message?.includes('UNIQUE')) {
+        setErrors({ name: true });
+        setIsDuplicate(true);
       }
     } finally {
       setIsSaving(false);
@@ -126,56 +179,137 @@ export default function AddCustomerScreen() {
             <Ionicons name="chevron-back" size={28} color={colorScheme === 'dark' ? '#ffffff' : '#1f2937'} />
         </TouchableOpacity>
         <Text className="text-xl font-bold text-gray-900 dark:text-gray-100 italic">
-            {isEditing ? (isReadOnly ? 'Lend Details' : 'Edit Lend') : 'New Entry'}
+            {isEditing ? (isReadOnly ? 'Lend Receipt' : 'Edit Lend') : 'New Entry'}
         </Text>
         <View className="w-12" />
     </View>
   );
 
+  const isFormValid = name.trim() !== '' && amount.trim() !== '' && !isNaN(parseFloat(amount));
+
   const footer = !isReadOnly ? (
     <View className="px-6 py-4">
         <Pressable
-            className={`h-16 rounded-2xl items-center justify-center shadow-lg shadow-sky-500/30 ${isSaving ? 'bg-sky-400' : 'bg-sky-500 active:opacity-90 active:scale-[0.98]'}`}
+            className={`h-16 rounded-2xl items-center justify-center shadow-lg ${!isFormValid ? 'bg-gray-100 dark:bg-gray-800' : (isSaving ? 'bg-sky-400' : 'bg-sky-500 shadow-sky-500/30 active:opacity-90 active:scale-[0.98]')}`}
             onPress={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || !isFormValid}
         >
-            <Text className="text-white text-lg font-bold">{isSaving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Add Customer & Lend')}</Text>
+            <Text className={`text-lg font-bold ${!isFormValid ? 'text-gray-400 dark:text-gray-600' : 'text-white'}`}>{isSaving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Add Customer & Lend')}</Text>
         </Pressable>
     </View>
   ) : null;
 
-  return (
-    <ScreenContainer scrollViewRef={scrollViewRef} header={header} footer={footer} edges={['top', 'bottom']} contentContainerStyle={{ padding: 24 }}>
-        {formError && (
-          <View className="mb-5 rounded-2xl bg-rose-500/10 border border-rose-200 dark:border-rose-900/10 p-4">
-            <Text className="text-rose-600 dark:text-rose-400 font-semibold">{formError}</Text>
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      'bg-sky-400', 'bg-emerald-400', 'bg-violet-400',
+      'bg-amber-400', 'bg-rose-400', 'bg-teal-400'
+    ];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
+
+  if (isReadOnly) {
+    const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'N/A';
+    
+    return (
+      <View className="flex-1">
+        <ScreenContainer header={header} edges={['top', 'bottom']} scrollable={false} centerContent={true}>
+          <View className="bg-white dark:bg-gray-900 rounded-[32px] p-6 mx-6 shadow-2xl border border-gray-100 dark:border-gray-800 mb-12">
+          <View className="items-center mb-6">
+            <View className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 items-center justify-center mb-3">
+              <Ionicons name="checkmark-circle" size={40} color="#10b981" />
+            </View>
+            <Text className="text-xl font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">Payment Settled</Text>
+            <Text className="text-gray-400 dark:text-gray-500 text-[10px] font-mono mt-1 opacity-60">REF: #{lendId?.padStart(6, '0')}</Text>
           </View>
-        )}
-        
-        <View className="mb-6">
-            <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Customer Name</Text>
-            <TextInput
-            className="h-14 px-4 rounded-2xl border border-gray-100 dark:border-zinc-800 bg-gray-50 dark:bg-zinc-900 text-lg text-gray-900 dark:text-gray-100"
-            placeholder="Who are you lending to?"
-            placeholderTextColor="#9ca3af"
-            value={name}
-            onChangeText={setName}
-            onFocus={(event) => handleFocus(event.target)}
-            autoFocus={!isReadOnly}
-            editable={!isReadOnly && !customerId && !isEditing}
-            />
+
+          <View className="border-t border-b border-dashed border-gray-200 dark:border-zinc-800 py-6 my-1 gap-4">
+            <View className="flex-row justify-between">
+              <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Customer</Text>
+              <Text className="text-gray-900 dark:text-gray-100 font-bold text-base">{name}</Text>
+            </View>
+            <View className="flex-row justify-between">
+              <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Principal</Text>
+              <Text className="text-gray-900 dark:text-gray-100 font-bold text-base">₱{parseFloat(amount).toFixed(2)}</Text>
+            </View>
+            <View className="flex-row justify-between">
+              <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Interest Rate</Text>
+              <Text className="text-gray-900 dark:text-gray-100 font-bold text-sm">{interestEnabled ? `${interestRate}% / ${interestType}` : '0%'}</Text>
+            </View>
+            <View className="flex-row justify-between">
+              <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Accumulated</Text>
+              <Text className="text-emerald-500 font-bold text-base">+ ₱{interestAccumulated.toFixed(2)}</Text>
+            </View>
+          </View>
+
+          <View className="py-4 gap-3">
+            <View className="flex-row justify-between items-center">
+              <View>
+                <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1">Issue Date</Text>
+                <Text className="text-gray-700 dark:text-gray-300 font-bold text-xs">{formatDate(dates.start)}</Text>
+              </View>
+              <Ionicons name="arrow-forward" size={12} color="#d1d5db" />
+              <View className="items-end">
+                <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1">Settled Date</Text>
+                <Text className="text-gray-700 dark:text-gray-300 font-bold text-xs">{formatDate(dates.end)}</Text>
+              </View>
+            </View>
+          </View>
+
+          <View className="border-t-2 border-gray-100 dark:border-zinc-800 pt-6 mt-1 items-center">
+            <Text className="text-gray-400 dark:text-gray-500 uppercase text-[10px] font-black tracking-[3px] mb-1">Total Paid</Text>
+            <Text className="text-4xl font-black text-gray-900 dark:text-gray-100">₱{totalToPay.toFixed(2)}</Text>
+          </View>
+          </View>
+        </ScreenContainer>
+      </View>
+    );
+  }
+
+  return (
+    <View className="flex-1">
+      <ScreenContainer scrollViewRef={scrollViewRef} header={header} footer={footer} edges={['top', 'bottom']} contentContainerStyle={{ padding: 24 }}>
+        <View className="mb-10">
+            {isEditing || customerId ? (
+                <View className="flex-row items-center px-1">
+                    <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${getAvatarColor(name || 'C')}`}>
+                        <Text className="text-white font-bold text-base">{(name || 'C').charAt(0).toUpperCase()}</Text>
+                    </View>
+                    <View>
+                        <Text className="text-xs text-gray-400 dark:text-gray-500 uppercase tracking-widest font-semibold">Lending to</Text>
+                        <Text className="text-lg font-bold text-gray-900 dark:text-gray-100">{name}</Text>
+                    </View>
+                </View>
+            ) : (
+                <>
+                  <View className="flex-row items-center justify-between mb-2 ml-1">
+                    <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">Customer Name</Text>
+                    {isDuplicate && <Text className="text-[10px] text-red-500 font-black uppercase italic mr-1">Already Taken!</Text>}
+                  </View>
+                  <TextInput
+                    className={`h-14 px-4 rounded-2xl border ${errors.name ? 'border-red-500 bg-red-50/50 dark:bg-red-950/20' : 'border-gray-200 dark:border-gray-800'} bg-white dark:bg-gray-900 text-lg text-gray-900 dark:text-gray-100 shadow-sm`}
+                    placeholder="Who are you lending to?"
+                    placeholderTextColor="#9ca3af"
+                    value={name}
+                    onChangeText={(t) => { setName(t); setErrors(prev => ({ ...prev, name: false })); setIsDuplicate(false); }}
+                    onFocus={(event) => handleFocus(event.target)}
+                    autoFocus={!isReadOnly}
+                    editable={!isReadOnly && !customerId && !isEditing}
+                  />
+                </>
+            )}
         </View>
 
         <View className="mb-6">
             <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Amount Owed</Text>
-            <View className="flex-row items-center bg-gray-50 dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 px-4">
-            <Text className="text-2xl font-bold text-gray-400 mr-2">$</Text>
+            <View className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${errors.amount ? 'border-red-500 bg-red-50/50 dark:bg-red-950/20' : 'border-gray-200 dark:border-gray-800'} px-4 shadow-sm`}>
+            <Text className="text-2xl font-bold text-gray-400 mr-2">₱</Text>
             <TextInput
               className="flex-1 h-16 text-3xl font-bold text-gray-900 dark:text-gray-100"
               placeholder="0.00"
               placeholderTextColor="#9ca3af"
               value={amount}
-              onChangeText={handleAmountChange}
+              onChangeText={(t) => { handleAmountChange(t); setErrors(prev => ({ ...prev, amount: false })); }}
               onFocus={(event) => handleFocus(event.target)}
               keyboardType="numeric"
               editable={!isReadOnly}
@@ -183,28 +317,32 @@ export default function AddCustomerScreen() {
             </View>
         </View>
 
-        <View className="mb-0 p-5 bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-sm">
+        <View className="mb-0 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">
             <View className="flex-row items-center justify-between mb-6">
             <View className="flex-row items-center">
-                <View className="w-10 h-10 rounded-full bg-sky-100 dark:bg-sky-900/40 items-center justify-center mr-3">
-                    <Ionicons name="trending-up" size={20} color="#0ea5e9" />
+                <View className={`w-10 h-10 rounded-full ${(!name.trim() || !amount.trim()) ? 'bg-gray-100 dark:bg-zinc-800' : 'bg-sky-100 dark:bg-sky-900/40'} items-center justify-center mr-3`}>
+                    <Ionicons name="trending-up" size={20} color={(!name.trim() || !amount.trim()) ? '#9ca3af' : '#0ea5e9'} />
                 </View>
-                <Text className="text-base font-bold text-gray-900 dark:text-gray-100">Interest Rate</Text>
+                <Text className={`text-base font-bold ${(!name.trim() || !amount.trim()) ? 'text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-gray-100'}`}>Interest Rate</Text>
             </View>
             <Switch
                 value={interestEnabled}
-                onValueChange={!isReadOnly ? setInterestEnabled : undefined}
+                onValueChange={!isReadOnly ? handleToggleInterest : undefined}
                 trackColor={{ false: '#e5e7eb', true: '#bae6fd' }}
                 thumbColor={interestEnabled ? '#0ea5e9' : '#f3f4f6'}
+                disabled={isReadOnly || !name.trim() || !amount.trim()}
             />
             </View>
 
-            {interestEnabled && (
+            {interestEnabled && name.trim() && amount.trim() && (
             <View className="gap-6">
               <View>
                 <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Interest Rate</Text>
-                <View className="flex-row items-center bg-gray-50 dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 px-4">
-                   <TextInput className="flex-1 h-14 text-2xl font-bold text-gray-900 dark:text-gray-100" placeholder="0" placeholderTextColor="#9ca3af" value={interestRate} onChangeText={handleRateChange} onFocus={(event) => handleFocus(event.target, 180)} keyboardType="numeric" editable={!isReadOnly} />
+                <View className="flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-4 shadow-sm">
+                   <TextInput 
+                     ref={interestInputRef}
+                     className="flex-1 h-14 text-2xl font-bold text-gray-900 dark:text-gray-100" placeholder="0" placeholderTextColor="#9ca3af" value={interestRate} onChangeText={handleRateChange} onFocus={(event) => handleFocus(event.target, 300)} keyboardType="numeric" editable={!isReadOnly} 
+                   />
                   <Text className="text-xl font-bold text-gray-400 dark:text-gray-500 ml-2">%</Text>
                 </View>
               </View>
@@ -216,7 +354,7 @@ export default function AddCustomerScreen() {
                     <TouchableOpacity
                       key={type}
                       onPress={() => !isReadOnly && setInterestType(type)}
-                      className={`flex-1 py-3 items-center rounded-xl border ${interestType === type ? 'bg-sky-50 border-sky-200 dark:bg-sky-900/30 dark:border-sky-800' : 'bg-transparent border-gray-100 dark:border-zinc-800'}`}
+                      className={`flex-1 py-3 items-center rounded-xl border ${interestType === type ? 'bg-sky-50 border-sky-200 dark:bg-sky-900/40 dark:border-sky-700' : 'bg-transparent border-gray-100 dark:border-gray-800 dark:bg-gray-800'}`}
                     >
                       <Text className={`font-bold ${interestType === type ? 'text-sky-600 dark:text-sky-400' : 'text-gray-400'}`}>{type}</Text>
                     </TouchableOpacity>
@@ -226,6 +364,7 @@ export default function AddCustomerScreen() {
             </View>
             )}
         </View>
-    </ScreenContainer>
+      </ScreenContainer>
+    </View>
   );
 }

@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 - Ongoing refinements for the second iteration of version 1.
 
+## [1.2.0] - Iteration 4 - 2026-03-22
+### Added
+- "Dark Bluey" OLED Dark Mode (Gray-950) with refined Gray-900 elevated cards and Gray-800 borders.
+- High-Contrast Light Mode with pure White cards/inputs and Gray-200 borders for better visibility.
+- PHP (₱) Currency support throughout the application.
+- Modern "Display Name" card style for customer transaction headers.
+- "Delete Contact" feature in the Select Customer screen via long-press.
+- Real-time "Already Taken!" duplicate name validation in the Add Customer screen.
+- Smart "Save" button disabling when required fields are empty or invalid.
+- Guards for interest settings: disabled if name or amount fields are empty.
+
+### Changed
+- Refined Dashboard long-press behavior: "Clear Transaction" now clears ongoing lends while preserving the contact.
+- Replaced floating top toast validation with discreet, context-aware highlights and label-level errors.
+- Unified "one-pager" aesthetic with consistent background colors and subtle dividing borders.
+
+### Fixed
+- Fixed duplicate name bug in the Add Customer flow.
+- Resolved input field visibility issues during keyboard interaction.
+- Fixed layout clipping for "Already Taken!" error text.
+
 ## [1.1.0] - Iteration 2 - 2026-03-21
 ### Added
 - NativeWind styling integration across the app.

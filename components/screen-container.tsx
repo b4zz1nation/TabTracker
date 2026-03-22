@@ -31,48 +31,49 @@ export default function ScreenContainer({
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={edges}>
       {/* 1. STICKY HEADER stays at the top */}
-      {header && <View className="z-50 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800">{header}</View>}
+      {header && <View className="z-50 bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-900">{header}</View>}
       
-      <View style={styles.flex}>
-        {scrollable ? (
-          <KeyboardAwareScrollView
-            ref={scrollViewRef}
-            style={styles.flex}
-            contentContainerStyle={[
-              styles.scrollContent,
-              centerContent && styles.center,
-              // Add padding equal to footer height (80) + small gap (20) so content isn't covered
-              { paddingBottom: footer ? 100 : 20 },
-              contentContainerStyle,
-            ]}
-            keyboardShouldPersistTaps="handled"
-            enableOnAndroid={true}
-            enableAutomaticScroll={true}
-            extraHeight={140}
-            extraScrollHeight={20}
-            showsVerticalScrollIndicator={false}
-            bounces={true}
-          >
-            <Pressable onPress={Keyboard.dismiss} style={styles.flex} accessible={false}>
-              {children}
-            </Pressable>
-          </KeyboardAwareScrollView>
-        ) : (
-          <View style={styles.flex}>{children}</View>
-        )}
+      <KeyboardAvoidingView 
+        style={styles.flex} 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <View style={styles.flex}>
+          {scrollable ? (
+            <KeyboardAwareScrollView
+              ref={scrollViewRef}
+              style={styles.flex}
+              contentContainerStyle={[
+                styles.scrollContent,
+                centerContent && styles.center,
+                // Minimal padding bottom to keep things tight
+                { paddingBottom: 20 },
+                contentContainerStyle,
+              ]}
+              keyboardShouldPersistTaps="handled"
+              enableOnAndroid={false}
+              enableAutomaticScroll={true}
+              extraHeight={140}
+              extraScrollHeight={0}
+              showsVerticalScrollIndicator={false}
+              bounces={true}
+            >
+              <Pressable onPress={Keyboard.dismiss} style={styles.flex} accessible={false}>
+                {children}
+              </Pressable>
+            </KeyboardAwareScrollView>
+          ) : (
+            <View style={[styles.flex, centerContent && styles.center, contentContainerStyle]}>{children}</View>
+          )}
+        </View>
 
         {/* 2. FOOTER that follows keyboard and stays above it */}
         {footer && (
-          <KeyboardAvoidingView
-            behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-            style={styles.footerContainer}
-          >
-            <View className="bg-white dark:bg-zinc-900 border-t border-gray-100 dark:border-zinc-800 z-10 w-full">
-              {footer}
-            </View>
-          </KeyboardAvoidingView>
+          <View className="bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-900 z-10 w-full">
+            {footer}
+          </View>
         )}
-      </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -81,10 +82,4 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   scrollContent: { flexGrow: 1 },
   center: { justifyContent: 'center' },
-  footerContainer: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-  },
 });

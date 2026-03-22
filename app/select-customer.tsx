@@ -1,8 +1,9 @@
-import { useState, useCallback, useMemo } from 'react';
-import { FlatList, Pressable, TextInput, View, Text, TouchableOpacity } from 'react-native';
+import { useState, useCallback, useMemo, useRef } from 'react';
+import { FlatList, Pressable, TextInput, View, Text, TouchableOpacity, Animated, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 
 import { useCustomers, Customer } from '@/hooks/use-customers';
 import { useLends } from '@/hooks/use-lends';
@@ -12,9 +13,38 @@ import ScreenContainer from '@/components/screen-container';
 export default function SelectCustomerScreen() {
   const router = useRouter();
   const colorScheme = useColorScheme();
-  const { customers, refresh: refreshCustomers } = useCustomers();
+  const { customers, refresh: refreshCustomers, deleteCustomer } = useCustomers();
   const { lends, refresh: refreshLends } = useLends();
   const [search, setSearch] = useState('');
+ 
+  const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteModalMounted, setDeleteModalMounted] = useState(false);
+  const deleteAnim = useRef(new Animated.Value(300)).current;
+ 
+  const handleDeleteCustomer = async (id: number) => {
+    try {
+      await deleteCustomer(id);
+      refreshCustomers();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+ 
+  const openDeleteModal = (id: number) => {
+    setDeleteId(id);
+    setDeleteModalMounted(true);
+    deleteAnim.setValue(300);
+    Animated.timing(deleteAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start();
+  };
+ 
+  const closeDeleteModal = (cb?: () => void) => {
+    Animated.timing(deleteAnim, { toValue: 300, duration: 200, useNativeDriver: true }).start(() => {
+      setDeleteModalMounted(false);
+      setDeleteId(null);
+      cb?.();
+    });
+  };
 
   useFocusEffect(
     useCallback(() => {
@@ -89,43 +119,49 @@ export default function SelectCustomerScreen() {
     const firstChar = item.name.charAt(0).toUpperCase();
 
     return (
-      <View className="rounded-2xl mx-4 mb-3 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
+      <View className="rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
         <Pressable
           onPress={() => handleSelect(item)}
-          className="flex-row items-center p-4 active:opacity-70"
+          onLongPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+            openDeleteModal(item.id);
+          }}
+          delayLongPress={500}
+          className="flex-row items-center p-5 active:opacity-70"
         >
           {/* Left — Avatar */}
-          <View className={`w-11 h-11 rounded-full items-center justify-center mr-4 ${avatarColor}`}>
+          <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${avatarColor} shadow-sm`}>
             <Text className="text-white font-bold text-lg">{firstChar}</Text>
           </View>
-
-          {/* Center — Name, Reference */}
-          <View className="flex-1 mr-3">
-            <Text className="text-[16px] font-semibold text-gray-900 dark:text-gray-100">{item.name}</Text>
-            <Text className="text-xs text-gray-400 dark:text-gray-500 mt-0.5">
-              {stats.lendCount > 0 ? `${stats.lendCount} active lend${stats.lendCount !== 1 ? 's' : ''}` : 'No active lends'}
-              {stats.interestBadge ? `  ·  ${stats.interestBadge}` : ''}
-            </Text>
+ 
+          {/* Center — Name Info */}
+          <View className="flex-1">
+            <Text className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-[2px] font-black mb-0.5">Customer</Text>
+            <Text className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight">{item.name}</Text>
           </View>
-
+ 
           {/* Right — Amount */}
           {stats.totalOngoing !== 0 && (
-            <Text className={`text-[16px] font-bold ${isPositive ? 'text-emerald-500' : 'text-gray-900 dark:text-gray-100'}`}>
-              {isPositive ? '+ ' : ''}{amountAbs} $
-            </Text>
+            <View className="items-end mr-2">
+              <Text className="text-[8px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-black mb-0.5">Balance</Text>
+              <Text className={`text-base font-black ${isPositive ? 'text-emerald-500' : 'text-gray-900 dark:text-gray-100'}`}>
+                ₱{amountAbs}
+              </Text>
+            </View>
           )}
-          <Ionicons name="chevron-forward" size={16} color="#d1d5db" className="ml-2" />
+          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
         </Pressable>
       </View>
     );
   };
 
   return (
-    <ScreenContainer scrollable={false} edges={['top', 'bottom']} header={header}>
+    <View className="flex-1">
+      <ScreenContainer scrollable={false} edges={['top', 'bottom']} header={header}>
       <View className="flex-1 pt-4">
         {/* Search Bar */}
         <View className="px-4 pb-4">
-          <View className="flex-row items-center bg-gray-100 dark:bg-zinc-900 rounded-2xl px-4 h-14">
+          <View className="flex-row items-center bg-gray-100 dark:bg-gray-900 rounded-2xl border border-transparent dark:border-gray-800 px-4 h-14">
             <Ionicons name="search" size={20} color="#9ca3af" />
             <TextInput
               className="flex-1 ml-2 text-lg text-gray-900 dark:text-gray-100"
@@ -161,5 +197,40 @@ export default function SelectCustomerScreen() {
         />
       </View>
     </ScreenContainer>
+ 
+    {/* Delete Confirmation Modal */}
+    <Modal visible={deleteModalMounted} transparent animationType="none" onRequestClose={() => closeDeleteModal()}>
+      <View className="flex-1">
+        <Pressable className="absolute inset-0 bg-black/50" onPress={() => closeDeleteModal()} />
+        <Animated.View
+          style={{ transform: [{ translateY: deleteAnim }] }}
+          className="absolute bottom-0 w-full bg-white dark:bg-gray-900 rounded-t-3xl px-6 pt-6 pb-12"
+        >
+          <View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-8" />
+ 
+          <View className="mb-8">
+            <Text className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Delete Contact?</Text>
+            <Text className="text-gray-500 dark:text-gray-400">This will also delete all their transaction history. This action cannot be undone.</Text>
+          </View>
+ 
+          <View className="gap-4">
+            <Pressable 
+              onPress={() => closeDeleteModal(() => { if (deleteId) handleDeleteCustomer(deleteId); })} 
+              className="w-full bg-rose-500 p-5 rounded-2xl items-center justify-center active:bg-rose-600"
+            >
+              <Text className="text-white font-bold text-lg">Delete</Text>
+            </Pressable>
+            
+            <Pressable 
+              onPress={() => closeDeleteModal()} 
+              className="w-full p-4 items-center justify-center active:opacity-60"
+            >
+              <Text className="text-gray-400 dark:text-gray-500 font-semibold text-lg">Cancel</Text>
+            </Pressable>
+          </View>
+        </Animated.View>
+      </View>
+    </Modal>
+    </View>
   );
 }

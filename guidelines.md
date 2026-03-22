@@ -4,8 +4,8 @@ This document outlines the roadmap, architectural decisions, and development sta
 
 ## 🚀 Project Roadmap
 
-### Phase 1: Core Tab Tracking (Iteration 2)
-The initial goal is to provide a seamless "one-tap" experience for tracking debts and balances. Iteration 2 focuses on refining the balance logic and deletion flows.
+### Phase 1: Core Tab Tracking (Iteration 4)
+The initial goal is to provide a seamless "one-tap" experience for tracking debts and balances. Iteration 4 focuses on Final Polish & Launch readiness.
 
 **High-Level Functional Requirements:**
 - **Manage Customers:** CRUD operations for names and contact info (optional).

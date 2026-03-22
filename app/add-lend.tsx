@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { TextInput, Pressable, View, Alert, Text, Switch, TouchableOpacity } from 'react-native';
+import { TextInput, Pressable, View, Alert, Text, Switch, TouchableOpacity, Animated } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -22,10 +22,22 @@ export default function AddLendScreen() {
 
   const [amount, setAmount] = useState('');
   const [interestEnabled, setInterestEnabled] = useState(false);
-  const [interestRate, setInterestRate] = useState('5');
+  const [interestRate, setInterestRate] = useState('');
   const [interestType, setInterestType] = useState<'Daily' | 'Monthly' | 'Yearly'>('Monthly');
   const [isSaving, setIsSaving] = useState(false);
   const scrollViewRef = useRef<any>(null);
+  const interestInputRef = useRef<TextInput>(null);
+ 
+  const [errorVisible, setErrorVisible] = useState(false);
+ 
+  const handleToggleInterest = (val: boolean) => {
+    setInterestEnabled(val);
+    if (val) {
+      setTimeout(() => {
+        interestInputRef.current?.focus();
+      }, 100);
+    }
+  };
 
   const handleFocus = (reactNode: any, extraHeight?: number) => {
     scrollViewRef.current?.scrollToFocusedInput(reactNode, extraHeight);
@@ -33,6 +45,7 @@ export default function AddLendScreen() {
 
   const handleAmountChange = (text: string) => {
     setAmount(text.replace(/[^0-9.]/g, '').replace(/(\..*)\./, '$1'));
+    setErrorVisible(false);
   };
 
   const handleRateChange = (text: string) => {
@@ -45,7 +58,7 @@ export default function AddLendScreen() {
       if (lend) {
         setAmount(lend.amount.toString());
         setInterestEnabled(lend.interest_enabled === 1);
-        setInterestRate(lend.interest_rate?.toString() || '5');
+        setInterestRate(lend.interest_rate?.toString() || '');
         setInterestType(lend.interest_type || 'Monthly');
       }
     }
@@ -54,7 +67,8 @@ export default function AddLendScreen() {
   const handleSave = async () => {
     const numAmount = parseFloat(amount);
     if (isNaN(numAmount) || numAmount <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid amount.');
+      setErrorVisible(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
 
@@ -100,14 +114,16 @@ export default function AddLendScreen() {
     </View>
   );
 
+  const isFormValid = amount.trim() !== '' && !isNaN(parseFloat(amount));
+
   const footer = (
     <View className="px-6 py-4">
         <Pressable
-            className={`h-16 rounded-2xl items-center justify-center shadow-lg shadow-sky-500/30 ${isSaving ? 'bg-sky-400' : 'bg-sky-500 active:opacity-90 active:scale-[0.98]'}`}
+            className={`h-16 rounded-2xl items-center justify-center shadow-lg ${!isFormValid ? 'bg-gray-100 dark:bg-gray-800' : (isSaving ? 'bg-sky-400' : 'bg-sky-500 shadow-sky-500/30 active:opacity-90 active:scale-[0.98]')}`}
             onPress={handleSave}
-            disabled={isSaving}
+            disabled={isSaving || !isFormValid}
         >
-            <Text className="text-white text-lg font-bold">{isSaving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Confirm Lend')}</Text>
+            <Text className={`text-lg font-bold ${!isFormValid ? 'text-gray-400 dark:text-gray-600' : 'text-white'}`}>{isSaving ? 'Saving...' : (isEditing ? 'Save Changes' : 'Confirm Lend')}</Text>
         </Pressable>
     </View>
   );
@@ -122,8 +138,9 @@ export default function AddLendScreen() {
   };
 
   return (
-    <ScreenContainer scrollViewRef={scrollViewRef} header={header} footer={footer} edges={['top', 'bottom']} contentContainerStyle={{ padding: 24 }}>
-      <View className="flex-row items-center mb-10 px-1">
+    <View className="flex-1">
+      <ScreenContainer scrollViewRef={scrollViewRef} header={header} footer={footer} edges={['top', 'bottom']} contentContainerStyle={{ padding: 24 }}>
+        <View className="flex-row items-center mb-10 px-1">
         <View className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${getAvatarColor(customer_name || 'C')}`}>
           <Text className="text-white font-bold text-base">{(customer_name || 'C').charAt(0).toUpperCase()}</Text>
         </View>
@@ -135,8 +152,8 @@ export default function AddLendScreen() {
 
       <View className="mb-8">
         <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Lend Amount</Text>
-        <View className="flex-row items-center bg-gray-50 dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 px-4">
-          <Text className="text-2xl font-bold text-gray-400 dark:text-gray-500 mr-2">$</Text>
+        <View className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${errorVisible ? 'border-red-500 bg-red-50/50 dark:bg-red-950/20' : 'border-gray-200 dark:border-gray-800'} px-4 shadow-sm`}>
+          <Text className="text-2xl font-bold text-gray-400 dark:text-gray-500 mr-2">₱</Text>
           <TextInput
             className="flex-1 h-16 text-3xl font-bold text-gray-900 dark:text-gray-100"
             placeholder="0.00" placeholderTextColor="#9ca3af"
@@ -147,19 +164,20 @@ export default function AddLendScreen() {
         </View>
       </View>
 
-      <View className="mb-0 p-5 bg-white dark:bg-zinc-900 rounded-3xl border border-gray-100 dark:border-zinc-800 shadow-sm">
+      <View className="mb-0 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">
         <View className="flex-row items-center justify-between mb-6">
           <View className="flex-row items-center">
-            <View className="w-10 h-10 rounded-full bg-sky-100 dark:bg-sky-900/40 items-center justify-center mr-3">
-              <Ionicons name="trending-up" size={20} color="#0ea5e9" />
+            <View className={`w-10 h-10 rounded-full ${(!amount.trim()) ? 'bg-gray-100 dark:bg-zinc-800' : 'bg-sky-100 dark:bg-sky-900/40'} items-center justify-center mr-3`}>
+              <Ionicons name="trending-up" size={20} color={(!amount.trim()) ? '#9ca3af' : '#0ea5e9'} />
             </View>
-            <Text className="text-base font-bold text-gray-900 dark:text-gray-100">Interest Rate</Text>
+            <Text className={`text-base font-bold ${(!amount.trim()) ? 'text-gray-300 dark:text-gray-600' : 'text-gray-900 dark:text-gray-100'}`}>Interest Rate</Text>
           </View>
           <Switch
             value={interestEnabled}
-            onValueChange={setInterestEnabled}
+            onValueChange={handleToggleInterest}
             trackColor={{ false: '#e5e7eb', true: '#bae6fd' }}
             thumbColor={interestEnabled ? '#0ea5e9' : '#f3f4f6'}
+            disabled={!amount.trim()}
           />
         </View>
 
@@ -167,8 +185,11 @@ export default function AddLendScreen() {
           <View className="gap-6">
             <View>
               <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">Interest Rate</Text>
-              <View className="flex-row items-center bg-gray-50 dark:bg-zinc-900 rounded-2xl border border-gray-100 dark:border-zinc-800 px-4">
-                 <TextInput className="flex-1 h-14 text-2xl font-bold text-gray-900 dark:text-gray-100" placeholder="0" placeholderTextColor="#9ca3af" value={interestRate} onChangeText={handleRateChange} onFocus={(event) => handleFocus(event.target, 180)} keyboardType="numeric" />
+              <View className="flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-4 shadow-sm">
+                 <TextInput
+                   ref={interestInputRef}
+                   className="flex-1 h-14 text-2xl font-bold text-gray-900 dark:text-gray-100" placeholder="0" placeholderTextColor="#9ca3af" value={interestRate} onChangeText={handleRateChange} onFocus={(event) => handleFocus(event.target, 300)} keyboardType="numeric"
+                 />
                 <Text className="text-xl font-bold text-gray-400 dark:text-gray-500 ml-2">%</Text>
               </View>
             </View>
@@ -180,7 +201,7 @@ export default function AddLendScreen() {
                   <TouchableOpacity
                     key={type}
                     onPress={() => setInterestType(type)}
-                    className={`flex-1 py-3 items-center rounded-xl border ${interestType === type ? 'bg-sky-50 border-sky-200 dark:bg-sky-900/30 dark:border-sky-800' : 'bg-transparent border-gray-100 dark:border-zinc-800'}`}
+                    className={`flex-1 py-3 items-center rounded-xl border ${interestType === type ? 'bg-sky-50 border-sky-200 dark:bg-sky-900/40 dark:border-sky-700' : 'bg-transparent border-gray-100 dark:border-gray-800 dark:bg-gray-800'}`}
                   >
                     <Text className={`font-bold ${interestType === type ? 'text-sky-600 dark:text-sky-400' : 'text-gray-400'}`}>{type}</Text>
                   </TouchableOpacity>
@@ -190,6 +211,7 @@ export default function AddLendScreen() {
           </View>
         )}
       </View>
-    </ScreenContainer>
+      </ScreenContainer>
+    </View>
   );
 }

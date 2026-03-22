@@ -114,7 +114,16 @@ export default function CustomerDetailScreen() {
   );
 
   const freqShort: Record<string, string> = { Daily: 'day', Monthly: 'mo', Yearly: 'yr' };
-
+ 
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      'bg-sky-400', 'bg-emerald-400', 'bg-violet-400',
+      'bg-amber-400', 'bg-rose-400', 'bg-teal-400'
+    ];
+    const index = name.charCodeAt(0) % colors.length;
+    return colors[index];
+  };
+ 
   // --- Lend action handlers -------------------------------------------------
   const handleEditLend = () => {
     if (!selectedLend) return;
@@ -127,6 +136,17 @@ export default function CustomerDetailScreen() {
           customerId: l.customer_id,
           readOnly: l.status === 'Completed' ? 'true' : 'false'
         },
+      });
+    });
+  };
+
+  const handleViewAccumulation = () => {
+    if (!selectedLend) return;
+    const l = selectedLend;
+    closeSheet(() => {
+      router.push({
+        pathname: '/lend-details/[id]',
+        params: { id: l.id.toString() }
       });
     });
   };
@@ -162,16 +182,30 @@ export default function CustomerDetailScreen() {
     const hasInterest = item.interest_enabled === 1 && item.interest_type;
     
     return (
-      <View className="rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
+      <View className="rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 shadow-sm overflow-hidden border border-gray-100 dark:border-gray-800">
         <Pressable
-          onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); openSheet(item); }}
+          onPress={() => { 
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
+            if (done) {
+              router.push({
+                pathname: '/add-customer',
+                params: { 
+                  lendId: item.id, 
+                  customerId: item.customer_id,
+                  readOnly: 'true'
+                },
+              });
+            } else {
+              openSheet(item); 
+            }
+          }}
           onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); openDeleteModal(item.id); }}
-          className={`w-full flex-row items-center justify-between p-4 active:opacity-70 ${done ? 'bg-gray-50 dark:bg-zinc-950 opacity-80' : 'bg-white dark:bg-gray-900'}`}
+          className={`w-full flex-row items-center justify-between p-4 active:opacity-70 ${done ? 'bg-gray-50 dark:bg-gray-900 opacity-60' : 'bg-white dark:bg-gray-900'}`}
           delayLongPress={500}
         >
           <View className="flex-1 mr-3">
             <Text className={`text-base font-semibold ${done ? 'text-gray-400 dark:text-gray-600 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
-              ${item.amount.toFixed(2)}
+              ₱{item.amount.toFixed(2)}
             </Text>
             {hasInterest ? (
               <View className="self-start mt-1 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40">
@@ -197,24 +231,36 @@ export default function CustomerDetailScreen() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={['top']}>
       {/* Header */}
-      <View className="px-5 pt-2 pb-4 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800">
-        <Pressable onPress={() => router.back()} className="w-11 h-11 items-center justify-center -ml-2 mb-1 active:opacity-50">
+      <View className="px-5 pt-3 pb-6 bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-900">
+        <Pressable onPress={() => router.back()} className="w-11 h-11 items-center justify-center -ml-2 mb-2 active:opacity-50">
           <Ionicons name="chevron-back" size={28} color={colorScheme === 'dark' ? '#ffffff' : '#1f2937'} />
         </Pressable>
-        <Text className="text-2xl font-bold text-gray-900 dark:text-gray-100">{customer?.name ?? 'Customer'}</Text>
-        <View className="flex-row items-baseline mt-1 gap-2">
-          <Text className="text-sm text-gray-400 dark:text-gray-500">Outstanding</Text>
-          <Text className={`text-2xl font-extrabold ${totalOutstanding > 0 ? 'text-red-500' : 'text-green-500'}`}>
-            ${totalOutstanding.toFixed(2)}
-          </Text>
-        </View>
+ 
+         <View className="flex-row items-center justify-between">
+            <View className="flex-row items-center flex-1">
+                 <View className={`w-12 h-12 rounded-full items-center justify-center mr-3 ${getAvatarColor(customer?.name || 'C')} shadow-sm`}>
+                     <Text className="text-white font-bold text-lg">{(customer?.name || 'C').charAt(0).toUpperCase()}</Text>
+                 </View>
+                 <View>
+                     <Text className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-[2px] font-black mb-0.5">Lending to</Text>
+                     <Text className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight leading-tight">{customer?.name}</Text>
+                 </View>
+            </View>
+ 
+            <View className="items-end">
+                <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-black mb-1">Outstanding</Text>
+                <Text className={`text-xl font-black ${totalOutstanding > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+                    ₱{totalOutstanding.toFixed(2)}
+                </Text>
+            </View>
+         </View>
       </View>
 
       {/* Show/Hide Toggle */}
       {completedLends.length > 0 && (
         <Pressable
           onPress={() => setHideCompleted((v) => !v)}
-          className="flex-row items-center justify-between px-5 py-3 bg-white dark:bg-zinc-900 border-b border-gray-100 dark:border-zinc-800"
+          className="flex-row items-center justify-between px-5 py-3 bg-white dark:bg-gray-950 border-b border-gray-100 dark:border-gray-900"
         >
           <Text className="text-sm text-gray-500 dark:text-gray-400">
             {hideCompleted ? `Show ${completedLends.length} completed` : 'Hide completed'}
@@ -254,7 +300,7 @@ export default function CustomerDetailScreen() {
           {/* Sliding bottom sheet */}
           <Animated.View
             style={{ transform: [{ translateY: sheetAnim }] }}
-            className="absolute bottom-0 w-full bg-white dark:bg-gray-900 rounded-t-3xl px-5 pt-6 pb-10"
+            className="absolute bottom-0 w-full bg-white dark:bg-gray-900 rounded-t-3xl px-5 pt-6 pb-10 border-t border-gray-100 dark:border-gray-800"
           >
             {/* Pill handle */}
             <View className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-6" />
@@ -270,8 +316,19 @@ export default function CustomerDetailScreen() {
                 </Text>
                 <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
               </Pressable>
-
-              {/* Complete (only for Ongoing) */}
+ 
+               {/* Accumulation Details (only for Ongoing with interest) */}
+               {selectedLend?.status === 'Ongoing' && selectedLend?.interest_enabled === 1 && (
+                 <Pressable onPress={handleViewAccumulation} className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700">
+                   <View className="w-10 h-10 rounded-full items-center justify-center bg-amber-100 dark:bg-amber-900/40 mr-4">
+                     <Ionicons name="trending-up" size={20} color="#f59e0b" />
+                   </View>
+                   <Text className="text-base font-semibold text-gray-900 dark:text-gray-100 flex-1">View Accumulation</Text>
+                   <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                 </Pressable>
+               )}
+ 
+               {/* Complete (only for Ongoing) */}
               {selectedLend?.status === 'Ongoing' && (
                 <Pressable onPress={handleCompleteLend} className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700">
                   <View className="w-10 h-10 rounded-full items-center justify-center bg-emerald-100 dark:bg-emerald-900/40 mr-4">

@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSQLiteContext } from 'expo-sqlite';
 import * as Haptics from 'expo-haptics';
 
 import { useCustomers, Customer } from '@/hooks/use-customers';
@@ -11,8 +12,9 @@ import { useColorScheme } from '@/hooks/use-color-scheme';
 import { getUserProfile } from '@/services/user-profile';
 
 export default function HomeScreen() {
-  const { customers, refresh: refreshCustomers, deleteCustomer } = useCustomers();
-  const { lends, refresh: refreshLends } = useLends();
+  const { customers, refresh: refreshCustomers } = useCustomers();
+  const { lends, refresh: refreshLends, deleteLend } = useLends();
+  const db = useSQLiteContext();
   const colorScheme = useColorScheme();
   const router = useRouter();
 
@@ -25,9 +27,17 @@ export default function HomeScreen() {
   const [deleteModalMounted, setDeleteModalMounted] = useState(false);
   const deleteAnim = useRef(new Animated.Value(300)).current;
 
-  const handleDeleteCustomer = async (id: number) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    await deleteCustomer(id);
+  const handleDeleteOngoingLends = async (customerId: number) => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      await db.runAsync("DELETE FROM lends WHERE customer_id = ? AND status = 'Ongoing'", [customerId]);
+      await db.runAsync('UPDATE customers SET balance = 0 WHERE id = ?', [customerId]);
+      await refreshCustomers();
+      await refreshLends();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    } catch (err) {
+      console.error(err);
+    }
   };
 
   const openPicker = () => {
@@ -139,7 +149,7 @@ export default function HomeScreen() {
     const firstChar = item.name.charAt(0).toUpperCase();
 
     return (
-      <View className="rounded-2xl mx-4 mb-3 bg-white dark:bg-gray-900 shadow-sm overflow-hidden">
+      <View className="rounded-2xl mx-4 mb-3 bg-white dark:bg-gray-900 shadow-sm overflow-hidden border border-gray-100 dark:border-gray-800">
         <Pressable
           onPress={() => router.push(`/customer/${item.id}` as any)}
           onLongPress={() => {
@@ -178,7 +188,7 @@ export default function HomeScreen() {
                 : 'text-gray-400 dark:text-gray-500'
             }`}
           >
-            {isPositive ? '+ ' : stats.totalOngoing < 0 ? '- ' : ''}{amountAbs} $
+            {isPositive ? '+ ' : stats.totalOngoing < 0 ? '- ' : ''}{amountAbs} ₱
           </Text>
         </Pressable>
       </View>
@@ -187,13 +197,13 @@ export default function HomeScreen() {
 
   return (
     <View className="flex-1 bg-gray-50 dark:bg-gray-950 pt-16">
-      {userName ? <Text className="text-xl font-bold text-gray-900 dark:text-gray-100 px-5 pt-2">{`Hey, ${userName} 👋`}</Text> : null}
+      {userName ? <Text className="text-xl font-bold text-gray-900 dark:text-gray-100 px-5 pt-2">{`Hey, ${userName}`}</Text> : null}
 
       {/* Summary */}
       <View className="m-4 p-6 rounded-3xl items-center justify-center bg-sky-50 dark:bg-sky-950/20">
         <Text className="text-sm font-medium uppercase tracking-widest text-sky-600 dark:text-sky-400 mb-1">Total Owed to You</Text>
         <Text className={`text-4xl font-extrabold ${grandTotal > 0 ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-          ${grandTotal.toFixed(2)}
+          ₱{grandTotal.toFixed(2)}
         </Text>
       </View>
 
@@ -224,7 +234,7 @@ export default function HomeScreen() {
           {/* Sliding bottom sheet */}
           <Animated.View
             style={{ transform: [{ translateY: slideAnim }] }}
-            className="absolute bottom-0 w-full bg-white dark:bg-gray-900 rounded-t-3xl px-5 pt-6 pb-10"
+            className="absolute bottom-0 w-full bg-white dark:bg-gray-900 rounded-t-3xl px-5 pt-6 pb-10 border-t border-gray-100 dark:border-gray-800"
           >
             <View className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-6" />
 
@@ -263,20 +273,20 @@ export default function HomeScreen() {
             <View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-8" />
 
             <View className="mb-8">
-              <Text className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Delete Entry?</Text>
-              <Text className="text-gray-500 dark:text-gray-400">This action cannot be undone.</Text>
+              <Text className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Clear Transaction?</Text>
+              <Text className="text-gray-500 dark:text-gray-400">This will remove the ongoing lend without deleting the contact. This action cannot be undone.</Text>
             </View>
 
             <View className="gap-4">
-              <Pressable 
-                onPress={() => closeDeleteModal(() => { if (deleteId) handleDeleteCustomer(deleteId); })} 
+              <Pressable
+                onPress={() => closeDeleteModal(() => { if (deleteId) handleDeleteOngoingLends(deleteId); })}
                 className="w-full bg-rose-500 p-5 rounded-2xl items-center justify-center active:bg-rose-600"
               >
-                <Text className="text-white font-bold text-lg">Delete</Text>
+                <Text className="text-white font-bold text-lg">Clear Lend</Text>
               </Pressable>
-              
-              <Pressable 
-                onPress={() => closeDeleteModal()} 
+
+              <Pressable
+                onPress={() => closeDeleteModal()}
                 className="w-full p-4 items-center justify-center active:opacity-60"
               >
                 <Text className="text-gray-400 dark:text-gray-500 font-semibold text-lg">Cancel</Text>
