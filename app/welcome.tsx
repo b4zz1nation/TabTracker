@@ -3,6 +3,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
+  Keyboard,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -126,6 +127,39 @@ const NameSlide = React.memo(({ onDone }: NameSlideProps) => {
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const [isFocused, setIsFocused] = useState(false);
+  const keyboardOffset = useRef(new Animated.Value(0)).current;
+  const wrapperRef = useRef<View>(null);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      () => {
+        // Only shift if we're focused and on the last slide
+        if (isFocused) {
+          Animated.timing(keyboardOffset, {
+            toValue: -200, // Shift entire slide content up as one block
+            duration: 300,
+            useNativeDriver: true,
+          }).start();
+        }
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      () => {
+        Animated.timing(keyboardOffset, {
+          toValue: 0,
+          duration: 250,
+          useNativeDriver: true,
+        }).start();
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [isFocused]);
 
   const handleComplete = async () => {
     const trimmed = name.trim();
@@ -147,34 +181,39 @@ const NameSlide = React.memo(({ onDone }: NameSlideProps) => {
 
   return (
     <View style={styles.slide} className="px-10 justify-center">
-      <View className="items-center mb-10">
-        <View className="w-24 h-24 bg-sky-100 dark:bg-sky-900/40 rounded-[40px] items-center justify-center mb-6 shadow-sm">
-          <Ionicons name="person" size={48} color="#0ea5e9" />
+      <Animated.View
+        ref={wrapperRef}
+        style={{ transform: [{ translateY: keyboardOffset }] }}
+      >
+        <View className="items-center mb-10">
+          <View className="w-24 h-24 bg-sky-100 dark:bg-sky-900/40 rounded-[40px] items-center justify-center mb-6 shadow-sm">
+            <Ionicons name="person" size={48} color="#0ea5e9" />
+          </View>
+          <Text className="text-4xl font-black text-gray-900 dark:text-gray-100 tracking-tighter text-center">
+            Lastly, your name.
+          </Text>
+          <Text className="mt-4 text-base text-gray-400 dark:text-gray-500 font-medium text-center">
+            To simplify things, we just need a name.
+          </Text>
         </View>
-        <Text className="text-4xl font-black text-gray-900 dark:text-gray-100 tracking-tighter text-center">
-          Lastly, your name.
-        </Text>
-        <Text className="mt-4 text-base text-gray-400 dark:text-gray-500 font-medium text-center">
-          To simplify things, we just need a name.
-        </Text>
-      </View>
 
-      <View>
         <TextInput
-          style={styles.nameInput}
-          className="text-4xl font-black text-gray-900 dark:text-gray-100 text-center"
-          placeholder="name"
-          placeholderTextColor="#d1d5db"
+          style={[styles.nameInput, !name && { fontStyle: 'italic' }]}
+          className={`text-xl text-gray-900 dark:text-gray-100 text-center ${isFocused ? 'bg-sky-50 dark:bg-sky-900/40' : 'bg-gray-100 dark:bg-gray-800/40'
+            }`}
+          placeholder="Name"
+          placeholderTextColor="#9ca3af"
           autoCapitalize="words"
           returnKeyType="done"
           value={name}
+          onFocus={() => setIsFocused(true)}
+          onBlur={() => setIsFocused(false)}
           onChangeText={(text) => {
             setName(text);
             if (error) setError('');
           }}
           onSubmitEditing={handleComplete}
         />
-        <View style={styles.underline} />
 
         {!!error && (
           <Text className="text-[10px] text-rose-500 font-black uppercase italic mt-4 text-center">
@@ -201,7 +240,7 @@ const NameSlide = React.memo(({ onDone }: NameSlideProps) => {
             </Text>
           </Pressable>
         </View>
-      </View>
+      </Animated.View>
     </View>
   );
 });
@@ -326,8 +365,11 @@ const styles = StyleSheet.create({
   container: { flex: 1 },
   flex: { flex: 1 },
   slide: { width, flex: 1 },
-  nameInput: { height: 96, paddingHorizontal: 24 },
-  underline: { height: 2, backgroundColor: '#0ea5e9', borderRadius: 4, opacity: 0.2, marginBottom: 24 },
+  nameInput: {
+    height: 64,
+    paddingHorizontal: 24,
+    borderRadius: 20,
+  },
   confirmButton: { height: 80, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
   footer: { paddingHorizontal: 40, paddingBottom: 48, alignItems: 'center' },
   dots: { flexDirection: 'row', marginBottom: 32 },
