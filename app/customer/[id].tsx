@@ -341,19 +341,28 @@ export default function CustomerDetailScreen() {
     const hasInterest = item.interest_enabled === 1 && item.interest_type;
     const [isExpanded, setIsExpanded] = useState(false);
     const expandAnim = useRef(new Animated.Value(0)).current;
+    const rotateAnim = useRef(new Animated.Value(0)).current;
 
     const toggle = () => {
       const toValue = isExpanded ? 0 : 1;
-      Animated.spring(expandAnim, {
-        toValue,
-        tension: 50,
-        friction: 8,
-        useNativeDriver: false,
-      }).start();
+      Animated.parallel([
+        Animated.spring(expandAnim, {
+          toValue,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: false,
+        }),
+        Animated.spring(rotateAnim, {
+          toValue,
+          tension: 50,
+          friction: 8,
+          useNativeDriver: true,
+        })
+      ]).start();
       setIsExpanded(!isExpanded);
     };
 
-    const rotation = expandAnim.interpolate({
+    const rotation = rotateAnim.interpolate({
       inputRange: [0, 1],
       outputRange: ['0deg', '180deg']
     });

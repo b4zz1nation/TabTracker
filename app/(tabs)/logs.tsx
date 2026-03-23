@@ -12,19 +12,30 @@ const LogCard = React.memo(({ group }: { group: any }) => {
   const router = useRouter();
   const [isExpanded, setIsExpanded] = useState(false);
   const expandAnim = useRef(new Animated.Value(0)).current;
+  const rotateAnim = useRef(new Animated.Value(0)).current;
 
   const toggle = () => {
     const toValue = isExpanded ? 0 : 1;
-    Animated.spring(expandAnim, {
-      toValue,
-      tension: 50,
-      friction: 8,
-      useNativeDriver: false,
-    }).start();
+    
+    // Split: useNativeDriver=true for rotation, false for height
+    Animated.parallel([
+      Animated.spring(expandAnim, {
+        toValue,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: false,
+      }),
+      Animated.spring(rotateAnim, {
+        toValue,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: true,
+      })
+    ]).start();
     setIsExpanded(!isExpanded);
   };
 
-  const rotation = expandAnim.interpolate({
+  const rotation = rotateAnim.interpolate({
     inputRange: [0, 1],
     outputRange: ['0deg', '180deg']
   });
