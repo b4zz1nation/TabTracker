@@ -1,5 +1,5 @@
 import { useSQLiteContext } from 'expo-sqlite';
-import { Animated, FlatList, Modal, Pressable, View, Text } from 'react-native';
+import { Animated, FlatList, Modal, Pressable, View, Text, Platform, TextInput, Keyboard, KeyboardAvoidingView, Dimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -19,7 +19,7 @@ export default function CustomerDetailScreen() {
 
   const db = useSQLiteContext();
   const { customers, refresh: refreshCustomers } = useCustomers();
-  const { lends, refresh: refreshLends, completeLend, deleteLend } = useLends();
+  const { lends, refresh: refreshLends, completeLend, deleteLend, addPayment } = useLends();
 
   // Local state for lends for immediate updates
   const [localLends, setLocalLends] = useState<Lend[]>([]);
@@ -36,6 +36,108 @@ export default function CustomerDetailScreen() {
   const [deleteStep, setDeleteStep] = useState<'initial' | 'confirm'>('initial');
   const [deleteModalMounted, setDeleteModalMounted] = useState(false);
   const deleteAnim = useRef(new Animated.Value(300)).current;
+
+  // Payment Modal State
+  const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentCurrentBalance, setPaymentCurrentBalance] = useState('0.00');
+  const paymentSlideAnim = useRef(new Animated.Value(600)).current;
+  const keyboardOffset = useRef(new Animated.Value(0)).current;
+  const paymentInputRef = useRef<TextInput>(null);
+
+  useEffect(() => {
+    if (!paymentModalVisible) return;
+
+    // Reset and animate in
+    paymentAmount === '' && setPaymentAmount('');
+    paymentSlideAnim.setValue(600);
+    Animated.spring(paymentSlideAnim, {
+      toValue: 0,
+      tension: 50,
+      friction: 8,
+      useNativeDriver: true,
+    }).start();
+
+    // Auto-focus the input
+    const timer = setTimeout(() => {
+        paymentInputRef.current?.focus();
+    }, 400);
+
+    // Keyboard handling
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+
+    const showSub = Keyboard.addListener(showEvent, (e) => {
+      // On Android, Modals often handle the keyboard better natively.
+      // On iOS, we need to shift. To avoid flying too far, we can limit the shift
+      // or use exactly what's needed.
+      const keyboardHeight = e.endCoordinates.height;
+      
+      // If the modal was flying too high, it might be due to compounding values or 
+      // measureInWindow being called while an animation is in progress.
+      // Let's use a more stable logic: use the keyboard height but only for the 
+      // portion that actually covers the modal bottom.
+      
+      const screenHeight = Dimensions.get('window').height;
+      const targetOffset = Platform.OS === 'ios' ? -keyboardHeight : 0;
+
+      Animated.timing(keyboardOffset, {
+        toValue: targetOffset,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    });
+
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      Animated.timing(keyboardOffset, {
+        toValue: 0,
+        duration: 250,
+        useNativeDriver: true,
+      }).start();
+    });
+
+    return () => {
+      clearTimeout(timer);
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, [paymentModalVisible]);
+
+  const closePaymentModal = (cb?: () => void) => {
+    Keyboard.dismiss();
+    Animated.timing(paymentSlideAnim, {
+      toValue: 600,
+      duration: 300,
+      useNativeDriver: true,
+    }).start(() => {
+      setPaymentModalVisible(false);
+      setPaymentAmount('');
+      cb?.();
+    });
+  };
+
+  const handleConfirmPayment = async () => {
+    if (!selectedLend) return;
+    const payAmount = parseFloat(paymentAmount);
+    if (isNaN(payAmount) || payAmount <= 0) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    try {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      await addPayment(selectedLend.id, payAmount);
+      
+      // Update local lends to reflect payment (simplification: just refresh or do more precise update)
+      // Since addPayment updates DB and calls refreshLends, and we have an effect that 
+      // syncs localLends with lends, it should just work.
+      
+      closePaymentModal();
+      setSelectedLend(null);
+    } catch (error) {
+      console.error('Error adding payment:', error);
+    }
+  };
 
   const handleDeleteLend = async (id: number) => {
     try {
@@ -155,7 +257,7 @@ export default function CustomerDetailScreen() {
     if (!selectedLend) return;
     const l = selectedLend;
     
-    // Calculate current balance for the payment screen
+    // Calculate current balance for the payment modal
     const start = new Date(l.created_at);
     const now = new Date();
     const diff = now.getTime() - start.getTime();
@@ -167,14 +269,11 @@ export default function CustomerDetailScreen() {
     const interest = (l.amount * ((l.interest_rate || 0) / 100)) * intervals;
     const total = l.amount + interest;
 
+    setPaymentCurrentBalance(total.toFixed(2));
+    
+    // Keep sheet mounted but hide it via animation or just close it
     closeSheet(() => {
-      router.push({
-        pathname: '/add-payment',
-        params: { 
-          lendId: l.id, 
-          currentBalance: total.toFixed(2)
-        },
-      });
+      setPaymentModalVisible(true);
     });
   };
 
@@ -454,6 +553,68 @@ export default function CustomerDetailScreen() {
               </>
             )}
           </Animated.View>
+        </View>
+      </Modal>
+
+      {/* Partial Payment Modal */}
+      <Modal visible={paymentModalVisible} transparent animationType="none" onRequestClose={() => closePaymentModal()}>
+        <View className="flex-1">
+          {/* Backdrop */}
+          <Pressable 
+            className="absolute inset-0 bg-black/40" 
+            onPress={() => closePaymentModal()} 
+          />
+          
+          <View className="flex-1 justify-end">
+            <Animated.View
+              style={{ 
+                transform: [
+                  { translateY: paymentSlideAnim },
+                  { translateY: keyboardOffset }
+                ] 
+              }}
+              className="bg-white dark:bg-gray-900 rounded-t-[40px] px-6 pt-6 pb-12 shadow-2xl border-t border-gray-100 dark:border-gray-800"
+            >
+              <View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-8" />
+              
+              <Text className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-[4px] font-black mb-2 text-center">Partial Payment</Text>
+              <Text className="text-2xl font-black text-gray-900 dark:text-gray-100 mb-2 text-center">How much was paid?</Text>
+              <Text className="text-xs text-center text-gray-400 dark:text-gray-500 mb-8 font-medium">
+                Balance: <Text className="text-sky-500 font-bold">₱{paymentCurrentBalance}</Text>
+              </Text>
+
+              <View className="relative mb-8">
+                <View className="absolute left-6 top-1/2 -mt-4 z-10">
+                  <Text className="text-3xl font-black text-gray-400">₱</Text>
+                </View>
+                <TextInput
+                  ref={paymentInputRef}
+                  keyboardType="decimal-pad"
+                  value={paymentAmount}
+                  onChangeText={setPaymentAmount}
+                  placeholder="0.00"
+                  placeholderTextColor="#9ca3af"
+                  className="bg-gray-50 dark:bg-gray-800/50 p-6 pl-14 rounded-3xl text-3xl font-black text-gray-900 dark:text-gray-100 border border-gray-100 dark:border-gray-800"
+                />
+              </View>
+
+              <View className="flex-row gap-4">
+                <Pressable 
+                  onPress={() => closePaymentModal()} 
+                  className="flex-1 p-5 rounded-3xl bg-gray-100 dark:bg-gray-800 items-center justify-center active:bg-gray-200 dark:active:bg-gray-700"
+                >
+                  <Text className="text-lg font-bold text-gray-400 dark:text-gray-500">Cancel</Text>
+                </Pressable>
+                
+                <Pressable 
+                  onPress={handleConfirmPayment} 
+                  className="flex-[2] p-5 rounded-3xl bg-sky-500 shadow-lg shadow-sky-400/40 items-center justify-center active:scale-95"
+                >
+                  <Text className="text-lg font-black text-white">Confirm Payment</Text>
+                </Pressable>
+              </View>
+            </Animated.View>
+          </View>
         </View>
       </Modal>
     </SafeAreaView>
