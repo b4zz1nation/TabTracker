@@ -5,12 +5,14 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useLends } from '@/hooks/use-lends';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 export default function AddPaymentScreen() {
   const router = useRouter();
   const { lendId, currentBalance } = useLocalSearchParams<{ lendId: string; currentBalance: string }>();
   const { addPayment } = useLends();
   const colorScheme = useColorScheme();
+  const insets = useSafeAreaInsets();
   
   const [amount, setAmount] = useState('');
   const slideAnim = useRef(new Animated.Value(600)).current;
@@ -94,15 +96,16 @@ export default function AddPaymentScreen() {
       />
       
       <View className="flex-1 justify-end">
-        <Animated.View
-          style={{ 
-            transform: [
-              { translateY: slideAnim },
-              { translateY: keyboardOffset }
-            ] 
-          }}
-          className="bg-white dark:bg-gray-900 rounded-t-[40px] px-6 pt-6 pb-12 shadow-2xl border-t border-gray-100 dark:border-gray-800"
-        >
+          <Animated.View
+            style={{ 
+              transform: [
+                { translateY: slideAnim },
+                { translateY: keyboardOffset }
+              ],
+              paddingBottom: Math.max(insets.bottom, 16) + 24
+            }}
+            className="bg-white dark:bg-gray-900 rounded-t-[40px] px-6 pt-6 shadow-2xl border-t border-gray-100 dark:border-gray-800"
+          >
           <View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-8" />
           
           <Text className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-[4px] font-black mb-2 text-center">Partial Payment</Text>

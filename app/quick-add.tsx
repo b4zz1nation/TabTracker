@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, View, Text, Platform } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -7,6 +8,7 @@ import { useCustomers } from '@/hooks/use-customers';
 
 export default function QuickAddScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { customers } = useRef(useCustomers()).current; // Use ref to avoid re-renders if just wanting static list, but actually better to just use it.
   const { customers: currentCustomers } = useCustomers();
   const [isClosing, setIsClosing] = useState(false);
@@ -87,8 +89,11 @@ export default function QuickAddScreen() {
       
       {/* Sliding bottom sheet */}
       <Animated.View
-        style={{ transform: [{ translateY: slideAnim }] }}
-        className="absolute bottom-0 w-full bg-white dark:bg-gray-900 rounded-t-[40px] px-6 pt-6 pb-12 shadow-2xl border-t border-gray-100 dark:border-gray-800"
+        style={{ 
+          transform: [{ translateY: slideAnim }],
+          paddingBottom: Math.max(insets.bottom, 16) + 24
+        }}
+        className="absolute bottom-0 w-full bg-white dark:bg-gray-900 rounded-t-[40px] px-6 pt-6 shadow-2xl border-t border-gray-100 dark:border-gray-800"
       >
         <View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-8" />
         

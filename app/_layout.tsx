@@ -1,16 +1,16 @@
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
 import { SQLiteProvider } from 'expo-sqlite';
-import React, { Component, Suspense, useCallback, useEffect, useState } from 'react';
-import { Platform, View, Text, ActivityIndicator } from 'react-native';
-import 'react-native-reanimated';
+import { StatusBar } from 'expo-status-bar';
+import React, { Component, Suspense, useCallback } from 'react';
+import { ActivityIndicator, Platform, Text, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import 'react-native-reanimated';
 import '../global.css';
 
+import { AuthContext } from '@/contexts/auth-context';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { migrateDbIfNeeded } from '@/services/database';
-import { AuthContext } from '@/contexts/auth-context';
 import { SheetProvider } from 'react-native-sheet-transitions';
 
 export const unstable_settings = {
@@ -44,7 +44,7 @@ class DatabaseErrorBoundary extends Component<{ children: React.ReactNode }, { h
 
 export default function RootLayout() {
   const colorScheme = useColorScheme();
-  const markProfileReady = useCallback(() => {}, []);
+  const markProfileReady = useCallback(() => { }, []);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

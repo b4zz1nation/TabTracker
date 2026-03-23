@@ -5,7 +5,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, FlatList, Keyboard, Platform, Pressable, Text, TextInput, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useCustomers } from '@/hooks/use-customers';
@@ -15,6 +15,7 @@ export default function CustomerDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const customerId = Number(id);
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const colorScheme = useColorScheme();
 
   const db = useSQLiteContext();
@@ -408,7 +409,13 @@ export default function CustomerDetailScreen() {
       </View>
       <FlatList data={displayedLends} keyExtractor={(item) => item.id.toString()} renderItem={renderLend} contentContainerStyle={{ paddingVertical: 16, paddingBottom: 120 }} />
       {!sheetMounted && !deleteModalMounted && !paymentModalVisible && (
-        <Pressable onPress={() => router.push({ pathname: '/add-lend', params: { customer_id: customerId, customer_name: customer?.name || '' } })} className="absolute bottom-10 right-8 w-16 h-16 rounded-full bg-sky-500 items-center justify-center shadow-lg"><Ionicons name="add" size={32} color="white" /></Pressable>
+        <Pressable 
+          onPress={() => router.push({ pathname: '/add-lend', params: { customer_id: customerId, customer_name: customer?.name || '' } })} 
+          className="absolute right-8 w-16 h-16 rounded-full bg-sky-500 items-center justify-center shadow-lg"
+          style={{ bottom: insets.bottom + 40 }}
+        >
+          <Ionicons name="add" size={32} color="white" />
+        </Pressable>
       )}
       {sheetMounted && (
         <View className="absolute inset-0 z-[2000] justify-end">
@@ -418,7 +425,13 @@ export default function CustomerDetailScreen() {
           >
             <Pressable className="flex-1" onPress={() => closeSheet()} />
           </Animated.View>
-          <Animated.View style={{ transform: [{ translateY: sheetAnim }] }} className="w-full bg-white dark:bg-gray-900 rounded-t-3xl p-6 pb-12">
+          <Animated.View 
+            style={{ 
+              transform: [{ translateY: sheetAnim }],
+              paddingBottom: Math.max(insets.bottom, 16) + 24
+            }} 
+            className="w-full bg-white dark:bg-gray-900 rounded-t-3xl p-6"
+          >
             <View className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-6" />
             <View className="gap-3">
               <Pressable onPress={handleEditLend} className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800"><Ionicons name="create-outline" size={20} color="#0ea5e9" /><Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">Edit</Text></Pressable>
@@ -436,7 +449,13 @@ export default function CustomerDetailScreen() {
           >
             <Pressable className="flex-1" onPress={() => closeDeleteModal()} />
           </Animated.View>
-          <Animated.View style={{ transform: [{ translateY: deleteAnim }] }} className="w-full bg-white dark:bg-gray-900 rounded-t-3xl p-6 pb-12">
+          <Animated.View 
+            style={{ 
+              transform: [{ translateY: deleteAnim }],
+              paddingBottom: Math.max(insets.bottom, 16) + 24
+            }} 
+            className="w-full bg-white dark:bg-gray-900 rounded-t-3xl p-6"
+          >
             <Text className="text-2xl font-bold mb-2">Delete Entry?</Text><Text className="text-gray-500 mb-8">This action cannot be undone.</Text>
             <Pressable onPress={() => closeDeleteModal(() => { if (deleteId) handleDeleteLend(deleteId); })} className="w-full bg-rose-500 p-5 rounded-2xl items-center mb-3"><Text className="text-white font-bold">Delete</Text></Pressable>
             <Pressable onPress={() => closeDeleteModal()} className="w-full p-4 items-center"><Text className="text-gray-400">Cancel</Text></Pressable>
@@ -458,9 +477,10 @@ export default function CustomerDetailScreen() {
               transform: [
                 { translateY: paymentSlideAnim },
                 { translateY: keyboardOffset }
-              ]
+              ],
+              paddingBottom: Math.max(insets.bottom, 16) + 24
             }}
-            className="bg-white dark:bg-gray-900 rounded-t-[40px] p-6 pb-12 shadow-2xl border-t border-gray-100 dark:border-gray-800"
+            className="bg-white dark:bg-gray-900 rounded-t-[40px] px-6 pt-6 shadow-2xl border-t border-gray-100 dark:border-gray-800"
           >
             <View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-8" />
             <Text className="text-2xl font-black text-center mb-2 text-gray-900 dark:text-gray-100">How much was paid?</Text>
