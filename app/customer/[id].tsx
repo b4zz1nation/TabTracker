@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useMemo, useRef, useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import * as Haptics from 'expo-haptics';
 
 import { useCustomers } from '@/hooks/use-customers';
@@ -19,7 +19,8 @@ export default function CustomerDetailScreen() {
 
   const db = useSQLiteContext();
   const { customers, refresh: refreshCustomers } = useCustomers();
-  const { lends, refresh: refreshLends, completeLend, deleteLend, addPayment } = useLends();
+  const { lends, refresh: refreshLends, completeLend, deleteLend, addPayment, getPaymentsByCustomer } = useLends();
+  const [customerPayments, setCustomerPayments] = useState<{ id: number; amount: number; created_at: string; lend_id: number }[]>([]);
 
   // Local state for lends for immediate updates
   const [localLends, setLocalLends] = useState<Lend[]>([]);
@@ -39,6 +40,7 @@ export default function CustomerDetailScreen() {
 
   // Payment Modal State
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
+  const [paymentLend, setPaymentLend] = useState<Lend | null>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentCurrentBalance, setPaymentCurrentBalance] = useState('0.00');
   const paymentSlideAnim = useRef(new Animated.Value(600)).current;
@@ -111,13 +113,14 @@ export default function CustomerDetailScreen() {
       useNativeDriver: true,
     }).start(() => {
       setPaymentModalVisible(false);
+      setPaymentLend(null);
       setPaymentAmount('');
       cb?.();
     });
   };
 
   const handleConfirmPayment = async () => {
-    if (!selectedLend) return;
+    if (!paymentLend) return;
     const payAmount = parseFloat(paymentAmount);
     if (isNaN(payAmount) || payAmount <= 0) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -126,14 +129,10 @@ export default function CustomerDetailScreen() {
 
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      await addPayment(selectedLend.id, payAmount);
-      
-      // Update local lends to reflect payment (simplification: just refresh or do more precise update)
-      // Since addPayment updates DB and calls refreshLends, and we have an effect that 
-      // syncs localLends with lends, it should just work.
+      await addPayment(paymentLend.id, payAmount);
       
       closePaymentModal();
-      setSelectedLend(null);
+      refreshAll();
     } catch (error) {
       console.error('Error adding payment:', error);
     }
@@ -188,11 +187,26 @@ export default function CustomerDetailScreen() {
     });
   };
 
+  const refreshAll = useCallback(async () => {
+    refreshCustomers();
+    refreshLends();
+    const payments = await getPaymentsByCustomer(customerId);
+    setCustomerPayments(payments);
+  }, [refreshCustomers, refreshLends, getPaymentsByCustomer, customerId]);
+
   useFocusEffect(
     useCallback(() => {
-      refreshCustomers();
-      refreshLends();
-    }, [refreshCustomers, refreshLends])
+      let isMounted = true;
+      
+      const fetch = async () => {
+        if (!isMounted) return;
+        await refreshAll();
+      };
+
+      fetch();
+      
+      return () => { isMounted = false; };
+    }, [refreshAll])
   );
 
   const customer = customers.find((c) => c.id === customerId);
@@ -270,6 +284,7 @@ export default function CustomerDetailScreen() {
     const total = l.amount + interest;
 
     setPaymentCurrentBalance(total.toFixed(2));
+    setPaymentLend(l);
     
     // Keep sheet mounted but hide it via animation or just close it
     closeSheet(() => {
@@ -277,14 +292,27 @@ export default function CustomerDetailScreen() {
     });
   };
 
-  const handleCompleteLend = async () => {
+   const handleCompleteLend = async () => {
     if (!selectedLend) return;
-    await completeLend(selectedLend.id);
+    const l = selectedLend;
     
-    // Update local state and recompute balance
-    const updatedLends = localLends.map(l => l.id === selectedLend.id ? { ...l, status: 'Completed' as const, completed_at: new Date().toISOString() } : l);
-    setLocalLends(updatedLends);
-    await updateBalanceInDB(updatedLends);
+    // Calculate current balance
+    const start = new Date(l.created_at);
+    const now = new Date();
+    const diff = now.getTime() - start.getTime();
+    const dayMs = 1000 * 60 * 60 * 24;
+    let intervals = 0;
+    if (l.interest_type === 'Daily') intervals = Math.floor(diff / dayMs);
+    else if (l.interest_type === 'Monthly') intervals = Math.floor(diff / (dayMs * 30.4375));
+    else if (l.interest_type === 'Yearly') intervals = Math.floor(diff / (dayMs * 365.25));
+    const interest = (l.amount * ((l.interest_rate || 0) / 100)) * intervals;
+    const totalNow = l.amount + interest;
+
+    // 1. Record the final payment (including interest)
+    await addPayment(l.id, totalNow);
+    
+    // 2. Refresh and close
+    await refreshAll();
     
     setSelectedLend(null);
     closeSheet();
@@ -303,12 +331,43 @@ export default function CustomerDetailScreen() {
   };
 
   // --- Render ----------------------------------------------------------------
-  const renderLend = ({ item }: { item: Lend }) => {
+  const LendCard = React.memo(({ item, payments, onOpenSheet, onDelete }: { 
+    item: Lend; 
+    payments: any[]; 
+    onOpenSheet: (l: Lend) => void;
+    onDelete: (id: number) => void;
+  }) => {
     const done = item.status === 'Completed';
     const hasInterest = item.interest_enabled === 1 && item.interest_type;
-    
+    const [isExpanded, setIsExpanded] = useState(false);
+    const expandAnim = useRef(new Animated.Value(0)).current;
+
+    const toggle = () => {
+      const toValue = isExpanded ? 0 : 1;
+      Animated.spring(expandAnim, {
+        toValue,
+        tension: 50,
+        friction: 8,
+        useNativeDriver: false,
+      }).start();
+      setIsExpanded(!isExpanded);
+    };
+
+    const rotation = expandAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: ['0deg', '180deg']
+    });
+
+    const bodyHeight = expandAnim.interpolate({
+      inputRange: [0, 1],
+      outputRange: [0, 400] // Cap it or enough to show all payments
+    });
+
+    const originalPrincipal = item.amount + payments.reduce((sum, p) => sum + p.amount, 0);
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+
     return (
-      <View className={`rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 shadow-sm overflow-hidden border border-gray-100 dark:border-gray-800 ${done ? 'opacity-70' : ''}`}>
+      <View className={`rounded-[32px] mx-4 mb-3 bg-white dark:bg-gray-900 shadow-sm overflow-hidden border border-gray-100 dark:border-gray-800 ${done ? 'opacity-70' : ''}`}>
         <Pressable
           onPress={() => { 
             Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); 
@@ -322,53 +381,112 @@ export default function CustomerDetailScreen() {
                 },
               });
             } else {
-              openSheet(item); 
+              onOpenSheet(item); 
             }
           }}
-          onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); openDeleteModal(item.id); }}
-          className={`w-full flex-row items-center justify-between active:opacity-70 ${done ? 'bg-gray-50 dark:bg-gray-900/50 p-3' : 'bg-white dark:bg-gray-900 p-4'}`}
+          onLongPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium); onDelete(item.id); }}
+          className={`w-full active:opacity-70 ${done ? 'bg-gray-50 dark:bg-gray-900/50 p-4' : 'bg-white dark:bg-gray-900 p-6'}`}
           delayLongPress={500}
         >
-          <View className="flex-1 mr-3">
-            <View className="flex-row items-center">
-              <Text className={`${done ? 'text-sm' : 'text-base'} font-bold ${done ? 'text-gray-400 dark:text-gray-600 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
-                ₱{item.amount.toFixed(2)}
-              </Text>
-              {done && item.description && (
-                <Text className="text-[10px] text-gray-400 dark:text-gray-500 italic ml-2 bg-gray-100 dark:bg-gray-800 px-1.5 py-0.5 rounded-md" numberOfLines={1}>
-                  "{item.description}"
+          <View className="flex-row justify-between items-start mb-1">
+            <View>
+              <View className="flex-row items-baseline gap-2">
+                <Text className={`${done ? 'text-sm' : 'text-xl'} font-black ${done ? 'text-gray-400 dark:text-gray-600 line-through' : 'text-gray-900 dark:text-gray-100'}`}>
+                  ₱{originalPrincipal.toFixed(2)}
                 </Text>
+                {!done && hasInterest && (
+                  <View className="px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40">
+                    <Text className="text-[10px] font-black text-sky-700 dark:text-sky-300 uppercase letter-spacing-1">
+                      {item.interest_rate}% {freqShort[item.interest_type!] ?? item.interest_type}
+                    </Text>
+                  </View>
+                )}
+              </View>
+              {!done && (
+                <View className="mt-1">
+                  <Text className="text-[9px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-widest">Remaining Balance</Text>
+                  <Text className="text-base font-black text-emerald-500">₱{item.amount.toFixed(2)}</Text>
+                </View>
               )}
             </View>
 
-            {!done && hasInterest && (
-              <View className="self-start mt-1 px-2 py-0.5 rounded-full bg-sky-100 dark:bg-sky-900/40">
-                <Text className="text-[11px] font-semibold text-sky-700 dark:text-sky-300">
-                  {item.interest_rate}% / {freqShort[item.interest_type!] ?? item.interest_type}
-                </Text>
+            <View className={`px-3 py-1.5 rounded-full ${done ? 'bg-emerald-100/50 dark:bg-emerald-900/20' : 'bg-sky-100 dark:bg-sky-900/30'}`}>
+              <Text className={`text-[10px] font-black uppercase tracking-widest ${done ? 'text-emerald-500' : 'text-sky-600 dark:text-sky-400'}`}>
+                {item.status}
+              </Text>
+            </View>
+          </View>
+
+          {item.description && (
+            <Text className="text-xs text-gray-400 dark:text-gray-600 mt-3 italic px-1 border-l-2 border-gray-100 dark:border-gray-800 ml-1" numberOfLines={1}>
+              "{item.description}"
+            </Text>
+          )}
+
+          <View className="flex-row justify-between items-center mt-5 relative">
+            <Text className={`${done ? 'text-[9px]' : 'text-[10px]'} text-gray-400 dark:text-gray-500 font-bold uppercase tracking-widest`}>
+              Started {new Date(item.created_at).toLocaleDateString()}
+            </Text>
+              
+            {!done && payments.length > 0 && (
+              <View className="absolute left-0 right-0 items-center justify-center -bottom-3">
+                <Pressable 
+                  onPress={(e) => { e.stopPropagation(); toggle(); }} 
+                  className="w-10 h-10 items-center justify-center active:opacity-50"
+                >
+                  <Animated.View style={{ transform: [{ rotate: rotation }] }}>
+                    <Ionicons name="chevron-down" size={24} color="#9ca3af" />
+                  </Animated.View>
+                </Pressable>
               </View>
             )}
 
-            {!done && item.description && (
-              <Text className="text-xs text-gray-500 dark:text-gray-400 mt-1 italic" numberOfLines={1}>
-                "{item.description}"
+            <View className="items-end">
+              <Text className="text-[9px] text-gray-400 dark:text-gray-500 font-black tracking-widest uppercase opacity-60">
+                REF: #{item.id.toString().padStart(6, '0')}
               </Text>
-            )}
-
-            <Text className={`${done ? 'text-[9px]' : 'text-xs'} text-gray-400 dark:text-gray-500 mt-0.5`}>
-              {new Date(item.created_at).toLocaleDateString()}
-            </Text>
-          </View>
-
-          <View className={`px-2.5 py-1 rounded-full ${done ? 'bg-emerald-100/50 dark:bg-emerald-900/20' : 'bg-sky-100 dark:bg-sky-900/30'}`}>
-            <Text className={`text-[10px] font-semibold ${done ? 'text-emerald-500' : 'text-sky-600 dark:text-sky-400'}`}>
-              {item.status}
-            </Text>
+            </View>
           </View>
         </Pressable>
+
+        {/* Embedded Payments Log */}
+        {!done && (
+          <Animated.View style={{ maxHeight: bodyHeight, opacity: expandAnim, overflow: 'hidden' }}>
+            <View className="px-5 pb-5 border-t border-gray-50 dark:border-gray-800/50 pt-6">
+              <View className="gap-2">
+                {payments.map((p) => (
+                  <View key={p.id} className="flex-row items-center justify-between bg-gray-50 dark:bg-gray-800/40 p-4 rounded-3xl border border-gray-100 dark:border-gray-800">
+                    <View className="flex-row items-center">
+                      <View className="w-8 h-8 rounded-full bg-emerald-100/60 dark:bg-emerald-900/40 items-center justify-center mr-3">
+                        <Ionicons name="cash-outline" size={16} color="#059669" />
+                      </View>
+                      <View>
+                        <Text className="text-gray-900 dark:text-gray-100 font-bold text-sm">₱{p.amount.toFixed(2)}</Text>
+                        <Text className="text-[10px] text-gray-400 dark:text-gray-500">{new Date(p.created_at).toLocaleDateString()}</Text>
+                      </View>
+                    </View>
+                    <View className="bg-sky-50 dark:bg-sky-900/30 px-3 py-1 rounded-full">
+                      <Text className="text-[9px] font-black text-sky-500 uppercase tracking-widest">Partial</Text>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            </View>
+          </Animated.View>
+        )}
       </View>
     );
-  };
+  });
+
+  const renderLend = ({ item }: { item: Lend }) => (
+    <LendCard 
+      item={item} 
+      payments={customerPayments.filter(p => p.lend_id === item.id)} 
+      onOpenSheet={openSheet} 
+      onDelete={openDeleteModal} 
+    />
+  );
+
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={['top']}>
@@ -423,6 +541,7 @@ export default function CustomerDetailScreen() {
             <Text className="text-gray-400 dark:text-gray-500 text-center px-10">No lends yet.</Text>
           </View>
         }
+        ListFooterComponent={<View className="pb-32" />}
       />
 
       {/* FAB — add lend for this customer */}
@@ -583,7 +702,7 @@ export default function CustomerDetailScreen() {
                 Balance: <Text className="text-sky-500 font-bold">₱{paymentCurrentBalance}</Text>
               </Text>
 
-              <View className="relative mb-8">
+              <View className="relative">
                 <View className="absolute left-6 top-1/2 -mt-4 z-10">
                   <Text className="text-3xl font-black text-gray-400">₱</Text>
                 </View>
@@ -591,14 +710,30 @@ export default function CustomerDetailScreen() {
                   ref={paymentInputRef}
                   keyboardType="decimal-pad"
                   value={paymentAmount}
-                  onChangeText={setPaymentAmount}
+                  onChangeText={(val) => {
+                    const clean = val.replace(/[^0-9.]/g, '');
+                    const maxVal = parseFloat(paymentCurrentBalance);
+                    const enteredVal = parseFloat(clean);
+                    if (!isNaN(enteredVal) && enteredVal > maxVal) {
+                      setPaymentAmount(paymentCurrentBalance);
+                      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+                    } else {
+                      setPaymentAmount(clean);
+                    }
+                  }}
                   placeholder="0.00"
                   placeholderTextColor="#9ca3af"
                   className="bg-gray-50 dark:bg-gray-800/50 p-6 pl-14 rounded-3xl text-3xl font-black text-gray-900 dark:text-gray-100 border border-gray-100 dark:border-gray-800"
                 />
               </View>
 
-              <View className="flex-row gap-4">
+              {parseFloat(paymentAmount) >= parseFloat(paymentCurrentBalance) && (
+                <Text className="text-[10px] text-amber-500 font-bold mt-2 ml-4 uppercase tracking-wider">
+                  Maximum amount reached (Full settlement)
+                </Text>
+              )}
+
+              <View className="flex-row gap-4 mt-8">
                 <Pressable 
                   onPress={() => closePaymentModal()} 
                   className="flex-1 p-5 rounded-3xl bg-gray-100 dark:bg-gray-800 items-center justify-center active:bg-gray-200 dark:active:bg-gray-700"
@@ -607,10 +742,11 @@ export default function CustomerDetailScreen() {
                 </Pressable>
                 
                 <Pressable 
+                  disabled={!paymentAmount || parseFloat(paymentAmount) <= 0}
                   onPress={handleConfirmPayment} 
-                  className="flex-[2] p-5 rounded-3xl bg-sky-500 shadow-lg shadow-sky-400/40 items-center justify-center active:scale-95"
+                  className={`flex-[2] p-5 rounded-3xl items-center justify-center shadow-lg active:scale-95 ${(!paymentAmount || parseFloat(paymentAmount) <= 0) ? 'bg-gray-200 dark:bg-gray-800 opacity-50 shadow-none' : 'bg-sky-500 shadow-sky-400/40'}`}
                 >
-                  <Text className="text-lg font-black text-white">Confirm Payment</Text>
+                  <Text className={`text-lg font-black ${(!paymentAmount || parseFloat(paymentAmount) <= 0) ? 'text-gray-400' : 'text-white'}`}>Confirm Payment</Text>
                 </Pressable>
               </View>
             </Animated.View>

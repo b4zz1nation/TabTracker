@@ -24,10 +24,14 @@ export default function LendDetailsScreen() {
   const customer = customers.find((c) => c.id === lend?.customer_id);
 
   useEffect(() => {
+    let isMounted = true;
     if (lendId) {
-      getPayments(lendId).then(setPayments);
+      getPayments(lendId).then((res) => {
+        if (isMounted) setPayments(res);
+      });
     }
-  }, [lendId, lends]); // Re-fetch if lends update (e.g. payment added)
+    return () => { isMounted = false; };
+  }, [lendId, getPayments, lends]); // getPayments is now stable
 
   const stats = useMemo(() => {
     if (!lend) return null;
@@ -51,10 +55,22 @@ export default function LendDetailsScreen() {
       label = `${intervals} Years`;
     }
     
+    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    
+    // For completed lends, use history as the truth because amount is zeroed out
+    if (lend.status === 'Completed') {
+      return {
+        intervals,
+        label,
+        interest: 0, // In completed state, interest is already part of totalPaid
+        total: totalPaid,
+        totalPaid,
+        daysElapsed: Math.floor(diff / dayMs)
+      };
+    }
+
     const interest = (lend.amount * ((lend.interest_rate || 0) / 100)) * intervals;
     const total = lend.amount + interest;
-    
-    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
 
     return {
       intervals,

@@ -1,5 +1,5 @@
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 
 export interface Customer {
   id: number;
@@ -28,7 +28,7 @@ export function useCustomers() {
     }
   }, [db]);
 
-  const addCustomer = async (
+  const addCustomer = useCallback(async (
     name: string,
     initialBalance: number = 0,
     interestEnabled: boolean = false,
@@ -48,9 +48,9 @@ export function useCustomers() {
       console.error('Error adding customer:', error);
       throw error;
     }
-  };
+  }, [db, fetchCustomers]);
 
-  const updateCustomer = async (
+  const updateCustomer = useCallback(async (
     id: number,
     name: string,
     balance: number,
@@ -71,9 +71,9 @@ export function useCustomers() {
       console.error('Error updating customer:', error);
       throw error;
     }
-  };
+  }, [db, fetchCustomers]);
 
-  const deleteCustomer = async (id: number) => {
+  const deleteCustomer = useCallback(async (id: number) => {
     try {
       await db.runAsync('DELETE FROM customers WHERE id = ?', [id]);
       await fetchCustomers();
@@ -81,18 +81,18 @@ export function useCustomers() {
       console.error('Error deleting customer:', error);
       throw error;
     }
-  };
+  }, [db, fetchCustomers]);
 
   useEffect(() => {
     fetchCustomers();
   }, [fetchCustomers]);
 
-  return {
+  return useMemo(() => ({
     customers,
     isLoading,
     addCustomer,
     updateCustomer,
     deleteCustomer,
     refresh: fetchCustomers,
-  };
+  }), [customers, isLoading, addCustomer, updateCustomer, deleteCustomer, fetchCustomers]);
 }

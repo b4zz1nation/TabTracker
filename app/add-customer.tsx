@@ -19,7 +19,7 @@ export default function AddCustomerScreen() {
 
   const db = useSQLiteContext();
   const { refresh: refreshCustomers } = useCustomers();
-  const { lends, refresh: refreshLends } = useLends();
+  const { lends, refresh: refreshLends, getPayments } = useLends();
 
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -31,8 +31,34 @@ export default function AddCustomerScreen() {
   const scrollViewRef = useRef<any>(null);
   const interestInputRef = useRef<TextInput>(null);
  
+  // Receipt/History states
+  const [payments, setPayments] = useState<any[]>([]);
+  const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
+  const historyExpandAnim = useRef(new Animated.Value(0)).current;
+  
   const [errors, setErrors] = useState<{ name?: boolean; amount?: boolean; interest?: boolean }>({});
   const [isDuplicate, setIsDuplicate] = useState(false);
+
+  const toggleHistory = () => {
+    const toValue = isHistoryExpanded ? 0 : 1;
+    Animated.spring(historyExpandAnim, {
+      toValue,
+      tension: 50,
+      friction: 8,
+      useNativeDriver: false,
+    }).start();
+    setIsHistoryExpanded(!isHistoryExpanded);
+  };
+
+  const historyRotation = historyExpandAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '180deg']
+  });
+
+  const historyHeight = historyExpandAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 300]
+  });
 
   const handleToggleInterest = (val: boolean) => {
     setInterestEnabled(val);
@@ -93,6 +119,10 @@ export default function AddCustomerScreen() {
         db.getFirstAsync<{ name: string }>('SELECT name FROM customers WHERE id = ?', [lend.customer_id]).then(res => {
           if (res) setName(res.name);
         });
+
+        if (isReadOnly) {
+          getPayments(Number(lendId)).then(setPayments);
+        }
       }
     } else if (customerId) {
         db.getFirstAsync<{ name: string }>('SELECT name FROM customers WHERE id = ?', [Number(customerId)]).then(res => {
@@ -222,64 +252,103 @@ export default function AddCustomerScreen() {
   if (isReadOnly) {
     const formatDate = (d: string | null) => d ? new Date(d).toLocaleDateString(undefined, { dateStyle: 'long' }) : 'N/A';
     
+    const historyTotal = payments.reduce((sum, p) => sum + p.amount, 0);
+    const displayAmount = isEditing ? (historyTotal > 0 ? historyTotal : parseFloat(amount)) : parseFloat(amount);
+
     return (
       <View className="flex-1">
-        <ScreenContainer header={header} edges={['top', 'bottom']} scrollable={false} centerContent={true}>
-          <View className="bg-white dark:bg-gray-900 rounded-[32px] p-6 mx-6 shadow-2xl border border-gray-100 dark:border-gray-800 mb-12">
-          <View className="items-center mb-6">
-            <View className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 items-center justify-center mb-3">
-              <Ionicons name="checkmark-circle" size={40} color="#10b981" />
-            </View>
-            <Text className="text-xl font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">Payment Settled</Text>
-            <Text className="text-gray-400 dark:text-gray-500 text-[10px] font-mono mt-1 opacity-60">REF: #{lendId?.padStart(6, '0')}</Text>
-          </View>
-
-          <View className="border-t border-b border-dashed border-gray-200 dark:border-zinc-800 py-6 my-1 gap-4">
-            <View className="flex-row justify-between">
-              <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Customer</Text>
-              <Text className="text-gray-900 dark:text-gray-100 font-bold text-base">{name}</Text>
-            </View>
-            <View className="flex-row justify-between">
-              <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Principal</Text>
-              <Text className="text-gray-900 dark:text-gray-100 font-bold text-base">₱{parseFloat(amount).toFixed(2)}</Text>
-            </View>
-            <View className="flex-row justify-between">
-              <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Interest Rate</Text>
-              <Text className="text-gray-900 dark:text-gray-100 font-bold text-sm">{interestEnabled ? `${interestRate}% / ${interestType}` : '0%'}</Text>
-            </View>
-            <View className="flex-row justify-between">
-              <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Accumulated</Text>
-              <Text className="text-emerald-500 font-bold text-base">+ ₱{interestAccumulated.toFixed(2)}</Text>
-            </View>
-          </View>
-
-          {isEditing && lends.find(l => l.id === Number(lendId))?.description && (
-            <View className="mt-4 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
-              <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1.5 ml-1">Description</Text>
-              <Text className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic">
-                "{lends.find(l => l.id === Number(lendId))?.description}"
-              </Text>
-            </View>
-          )}
-
-          <View className="py-4 gap-3">
-            <View className="flex-row justify-between items-center">
-              <View>
-                <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1">Issue Date</Text>
-                <Text className="text-gray-700 dark:text-gray-300 font-bold text-xs">{formatDate(dates.start)}</Text>
+        <ScreenContainer header={header} edges={['top', 'bottom']} scrollable={true} centerContent={true}>
+          <View className="bg-white dark:bg-gray-900 rounded-[32px] p-6 mx-6 shadow-2xl border border-gray-100 dark:border-gray-800 mb-20 mt-4">
+            <View className="items-center mb-6">
+              <View className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-900/30 items-center justify-center mb-3">
+                <Ionicons name="checkmark-circle" size={40} color="#10b981" />
               </View>
-              <Ionicons name="arrow-forward" size={12} color="#d1d5db" />
-              <View className="items-end">
-                <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1">Settled Date</Text>
-                <Text className="text-gray-700 dark:text-gray-300 font-bold text-xs">{formatDate(dates.end)}</Text>
+              <Text className="text-xl font-black text-gray-900 dark:text-gray-100 uppercase tracking-tight">Payment Settled</Text>
+              <Text className="text-gray-400 dark:text-gray-500 text-[10px] font-mono mt-1 opacity-60">REF: #{lendId?.padStart(6, '0')}</Text>
+            </View>
+
+            <View className="border-t border-b border-dashed border-gray-200 dark:border-zinc-800 py-6 my-1 gap-4">
+              <View className="flex-row justify-between">
+                <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Customer</Text>
+                <Text className="text-gray-900 dark:text-gray-100 font-bold text-base">{name}</Text>
+              </View>
+              <View className="flex-row justify-between">
+                <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Principal Paid</Text>
+                <Text className="text-gray-900 dark:text-gray-100 font-bold text-base">₱{displayAmount.toFixed(2)}</Text>
+              </View>
+              <View className="flex-row justify-between">
+                <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Interest Rate</Text>
+                <Text className="text-gray-900 dark:text-gray-100 font-bold text-sm">{interestEnabled ? `${interestRate}% / ${interestType}` : '0%'}</Text>
+              </View>
+              {interestAccumulated > 0 && (
+                <View className="flex-row justify-between">
+                  <Text className="text-gray-400 dark:text-gray-500 font-medium text-sm">Accumulated</Text>
+                  <Text className="text-emerald-500 font-bold text-base">+ ₱{interestAccumulated.toFixed(2)}</Text>
+                </View>
+              )}
+            </View>
+
+            {isEditing && lends.find(l => l.id === Number(lendId))?.description && (
+              <View className="mt-4 bg-gray-50 dark:bg-gray-800/50 p-4 rounded-2xl border border-gray-100 dark:border-gray-800">
+                <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1.5 ml-1">Description</Text>
+                <Text className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed italic">
+                  "{lends.find(l => l.id === Number(lendId))?.description}"
+                </Text>
+              </View>
+            )}
+
+            {/* Collapsible History Section */}
+            {payments.length > 0 && (
+              <View className="mt-4">
+                <Pressable 
+                  onPress={toggleHistory}
+                  className="flex-row items-center justify-between py-3 px-1 active:opacity-60"
+                >
+                  <Text className="text-[10px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-[2px]">Payment History</Text>
+                  <Animated.View style={{ transform: [{ rotate: historyRotation }] }}>
+                    <Ionicons name="chevron-down" size={14} color="#9ca3af" />
+                  </Animated.View>
+                </Pressable>
+                
+                <Animated.View style={{ maxHeight: historyHeight, opacity: historyExpandAnim, overflow: 'hidden' }}>
+                  <View className="gap-2 pt-1 pb-2">
+                    {payments.map((p, i) => (
+                      <View key={p.id} className="flex-row items-center justify-between bg-gray-50 dark:bg-gray-800/40 p-3 rounded-2xl">
+                        <View className="flex-row items-center">
+                          <View className="w-7 h-7 rounded-full bg-emerald-100/50 dark:bg-emerald-900/20 items-center justify-center mr-3">
+                            <Ionicons name="cash-outline" size={12} color="#10b981" />
+                          </View>
+                          <View>
+                            <Text className="text-gray-900 dark:text-gray-100 font-bold text-xs">₱{p.amount.toFixed(2)}</Text>
+                            <Text className="text-[8px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-tighter">{new Date(p.created_at).toLocaleDateString()}</Text>
+                          </View>
+                        </View>
+                        <Text className="text-[8px] text-sky-500 font-black uppercase tracking-widest">Partial</Text>
+                      </View>
+                    ))}
+                  </View>
+                </Animated.View>
+              </View>
+            )}
+
+            <View className="py-4 mt-2 gap-3">
+              <View className="flex-row justify-between items-center px-1">
+                <View>
+                  <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1">Issue Date</Text>
+                  <Text className="text-gray-700 dark:text-gray-300 font-bold text-[10px]">{formatDate(dates.start)}</Text>
+                </View>
+                <Ionicons name="arrow-forward" size={12} color="#d1d5db" />
+                <View className="items-end">
+                  <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1">Settled Date</Text>
+                  <Text className="text-gray-700 dark:text-gray-300 font-bold text-[10px]">{formatDate(dates.end)}</Text>
+                </View>
               </View>
             </View>
-          </View>
 
-          <View className="border-t-2 border-gray-100 dark:border-zinc-800 pt-6 mt-1 items-center">
-            <Text className="text-gray-400 dark:text-gray-500 uppercase text-[10px] font-black tracking-[3px] mb-1">Total Paid</Text>
-            <Text className="text-4xl font-black text-gray-900 dark:text-gray-100">₱{totalToPay.toFixed(2)}</Text>
-          </View>
+            <View className="border-t-2 border-gray-100 dark:border-zinc-800 pt-6 mt-1 items-center">
+              <Text className="text-gray-400 dark:text-gray-500 uppercase text-[10px] font-black tracking-[3px] mb-1">Total Settled</Text>
+              <Text className="text-4xl font-black text-gray-900 dark:text-gray-100">₱{(historyTotal + interestAccumulated).toFixed(2)}</Text>
+            </View>
           </View>
         </ScreenContainer>
       </View>

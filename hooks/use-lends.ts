@@ -1,5 +1,5 @@
 import { useSQLiteContext } from 'expo-sqlite';
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 
 export interface Lend {
   id: number;
@@ -33,7 +33,7 @@ export function useLends() {
     }
   }, [db]);
 
-  const addLend = async (
+  const addLend = useCallback(async (
     customerId: number,
     amount: number,
     interestEnabled: boolean = false,
@@ -47,9 +47,9 @@ export function useLends() {
       [customerId, amount, interestEnabled ? 1 : 0, interestRate, interestType, description, now]
     );
     await fetchAllLends();
-  };
+  }, [db, fetchAllLends]);
 
-  const updateLend = async (
+  const updateLend = useCallback(async (
     id: number,
     amount: number,
     interestEnabled: boolean = false,
@@ -62,18 +62,18 @@ export function useLends() {
       [amount, interestEnabled ? 1 : 0, interestRate, interestType, description, id]
     );
     await fetchAllLends();
-  };
+  }, [db, fetchAllLends]);
 
-  const completeLend = async (id: number) => {
+  const completeLend = useCallback(async (id: number) => {
     const now = new Date().toISOString();
     await db.runAsync(
       "UPDATE lends SET status = 'Completed', completed_at = ? WHERE id = ?",
       [now, id]
     );
     await fetchAllLends();
-  };
+  }, [db, fetchAllLends]);
 
-  const addPayment = async (lendId: number, paymentAmount: number) => {
+  const addPayment = useCallback(async (lendId: number, paymentAmount: number) => {
     const lend = lends.find((l) => l.id === lendId);
     if (!lend) return;
 
@@ -111,25 +111,32 @@ export function useLends() {
     );
 
     await fetchAllLends();
-  };
+  }, [db, lends, fetchAllLends]);
 
-  const deleteLend = async (id: number) => {
+  const deleteLend = useCallback(async (id: number) => {
     await db.runAsync('DELETE FROM lends WHERE id = ?', [id]);
     await fetchAllLends();
-  };
+  }, [db, fetchAllLends]);
 
-  const getPayments = async (lendId: number) => {
+  const getPayments = useCallback(async (lendId: number) => {
     return await db.getAllAsync<{ id: number; amount: number; created_at: string }>(
       'SELECT * FROM payments WHERE lend_id = ? ORDER BY created_at DESC',
       [lendId]
     );
-  };
+  }, [db]);
+
+  const getPaymentsByCustomer = useCallback(async (customerId: number) => {
+    return await db.getAllAsync<{ id: number; amount: number; created_at: string; lend_id: number }>(
+      'SELECT p.* FROM payments p JOIN lends l ON p.lend_id = l.id WHERE l.customer_id = ? ORDER BY p.created_at DESC',
+      [customerId]
+    );
+  }, [db]);
 
   useEffect(() => {
     fetchAllLends();
   }, [fetchAllLends]);
 
-  return {
+  return useMemo(() => ({
     lends,
     isLoading,
     addLend,
@@ -137,7 +144,8 @@ export function useLends() {
     completeLend,
     addPayment,
     getPayments,
+    getPaymentsByCustomer,
     deleteLend,
     refresh: fetchAllLends,
-  };
+  }), [lends, isLoading, addLend, updateLend, completeLend, addPayment, getPayments, getPaymentsByCustomer, deleteLend, fetchAllLends]);
 }

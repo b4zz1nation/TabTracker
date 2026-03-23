@@ -81,3 +81,32 @@ The initial goal is to provide a seamless "one-tap" experience for tracking debt
 -   **Phase 2:** History Logging (Timestamped records of all changes).
 -   **Phase 3:** Search & Category Tags.
 -   **Phase 4:** Cloud Sync (Supabase/Firebase integration).
+
+---
+
+## ⚠️ Agent Safeguards (CRITICAL)
+
+To prevent breaking the app's core navigation, onboarding, and payment logic, all AI agents MUST follow these rules:
+
+### 1. Onboarding & Slide Components
+- **Never remove `React.memo`** from `NameSlide`, `LogoSlide`, `FeaturesSlide`, `TutorialSlide`, and `SlideRenderer`. Removing memoization causes immediate remounting during parent `FlatList` scrolls, which destroys the navigation context.
+- **Never introduce `ScrollView`** inside any onboarding slide component. This breaks the parent `FlatList` gesture handling and causes navigation context errors.
+- **Do not modify** the parent `OnboardingScreen` component structure, `onViewableItemsChanged` logic, or the `scrollX` calculation.
+
+### 2. Navigation & Router
+- **Never reference `router` at render time.** 
+- **Only call `router.replace()`** (or any navigation method) inside event handlers (e.g., `handleComplete`, `onPress`). Calling them during render results in "navigation context not found" errors.
+
+### 3. Keyboard Handling (Slide/Modal Specific)
+- **Do NOT use `KeyboardAvoidingView`** with `padding` behavior inside individual slide components. 
+- **Always use `Animated.Value`** with `translateY` logic. 
+- Trigger animations using `Keyboard.addListener` for `keyboardWillShow`/`keyboardDidShow` and `keyboardWillHide`/`keyboardDidHide`. This ensures the content shifts precisely without breaking the layout.
+
+### 4. `useEffect` & Infinite Loops
+- **Stable Dependencies:** Always provide a complete and stable dependency array for `useEffect`, `useCallback`, and `useMemo`.
+- **Reference Management:** Wrap all object/array dependencies in `useMemo` and all function dependencies in `useCallback` if they are passed as props or used in other hooks. This is mandatory to prevent infinite render loops.
+
+### 5. Partial Payment Validation
+- **Balance Clamping:** The entered payment amount must never exceed the remaining balance.
+- **Auto-Correction:** If the input exceeds the balance, automatically clamp the value to the max balance and trigger `Haptics` for feedback. 
+- **Button State:** Always disable or dim the confirm button if the input is empty or zero.
