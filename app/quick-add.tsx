@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Animated, Pressable, View, Text, Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -9,44 +9,81 @@ export default function QuickAddScreen() {
   const router = useRouter();
   const { customers } = useRef(useCustomers()).current; // Use ref to avoid re-renders if just wanting static list, but actually better to just use it.
   const { customers: currentCustomers } = useCustomers();
-  const slideAnim = useRef(new Animated.Value(300)).current;
+  const [isClosing, setIsClosing] = useState(false);
+  const [unmounted, setUnmounted] = useState(false);
+  const slideAnim = useRef(new Animated.Value(600)).current;
+  const backdropAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    Animated.timing(slideAnim, {
-      toValue: 0,
-      duration: 300,
-      useNativeDriver: true,
-    }).start();
+    Animated.parallel([
+      Animated.spring(slideAnim, {
+        toValue: 0,
+        damping: 28,
+        stiffness: 300,
+        useNativeDriver: false, // Must be false to allow taps mid-animation (updates hit-box)
+      }),
+      Animated.timing(backdropAnim, {
+        toValue: 1,
+        duration: 150,
+        useNativeDriver: true,
+      })
+    ]).start();
   }, []);
 
-  const close = (cb?: () => void) => {
-    Animated.timing(slideAnim, {
-      toValue: 300,
-      duration: 250,
-      useNativeDriver: true,
-    }).start(() => {
+  const close = () => {
+    if (isClosing) return;
+    setIsClosing(true);
+    
+    // Trigger navigation IMMEDIATELY so the navigator doesn't feel stuck
+    if (router.canGoBack()) {
       router.back();
-      if (cb) setTimeout(cb, 50);
+    } else {
+      router.replace('/(tabs)');
+    }
+
+    // Still run the slide-out
+    Animated.parallel([
+      Animated.spring(slideAnim, {
+        toValue: 600,
+        damping: 32,
+        stiffness: 350,
+        useNativeDriver: false,
+      }),
+      Animated.timing(backdropAnim, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      })
+    ]).start(() => {
+      setUnmounted(true);
     });
   };
 
   const handleAddNew = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    close(() => router.push('/add-customer'));
+    setIsClosing(true);
+    setUnmounted(true);
+    router.replace('/add-customer');
   };
 
   const handleAddExisting = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    close(() => router.push('/select-customer'));
+    setIsClosing(true);
+    setUnmounted(true);
+    router.replace('/select-customer');
   };
+
+  if (unmounted) return null;
 
   return (
     <View className="flex-1">
       {/* Backdrop */}
-      <Pressable 
+      <Animated.View 
+        style={{ opacity: backdropAnim }}
         className="absolute inset-0 bg-black/40" 
-        onPress={() => close()} 
-      />
+      >
+        <Pressable className="flex-1" onPress={() => close()} />
+      </Animated.View>
       
       {/* Sliding bottom sheet */}
       <Animated.View

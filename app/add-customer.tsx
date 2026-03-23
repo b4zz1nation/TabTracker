@@ -202,7 +202,11 @@ export default function AddCustomerScreen() {
       await refreshCustomers();
       await refreshLends();
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      router.back();
+      if (router.canGoBack()) {
+        router.back();
+      } else {
+        router.replace('/(tabs)');
+      }
     } catch (error: any) {
       console.error(error);
       if (error.message?.includes('UNIQUE')) {
@@ -216,7 +220,17 @@ export default function AddCustomerScreen() {
 
   const header = (
     <View className="flex-row items-center justify-between px-2 py-3">
-        <TouchableOpacity onPress={() => router.back()} activeOpacity={0.6} className="w-12 h-12 items-center justify-center">
+        <TouchableOpacity 
+          onPress={() => {
+            if (router.canGoBack()) {
+              router.back();
+            } else {
+              router.replace('/(tabs)');
+            }
+          }} 
+          activeOpacity={0.6} 
+          className="w-12 h-12 items-center justify-center"
+        >
             <Ionicons name="chevron-back" size={28} color={colorScheme === 'dark' ? '#ffffff' : '#1f2937'} />
         </TouchableOpacity>
         <Text className="text-xl font-bold text-gray-900 dark:text-gray-100 italic">

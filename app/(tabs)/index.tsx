@@ -1,15 +1,15 @@
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Animated, FlatList, Modal, Pressable, View, Text } from 'react-native';
-import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useSQLiteContext } from 'expo-sqlite';
 import * as Haptics from 'expo-haptics';
+import { useRouter } from 'expo-router';
+import { useSQLiteContext } from 'expo-sqlite';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Animated, FlatList, Pressable, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 
-import { useCustomers, Customer } from '@/hooks/use-customers';
-import { useLends, Lend } from '@/hooks/use-lends';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Customer, useCustomers } from '@/hooks/use-customers';
+import { useLends } from '@/hooks/use-lends';
 import { getUserProfile } from '@/services/user-profile';
 
 export default function HomeScreen() {
@@ -23,7 +23,8 @@ export default function HomeScreen() {
 
   const [deleteId, setDeleteId] = useState<number | null>(null);
   const [deleteModalMounted, setDeleteModalMounted] = useState(false);
-  const deleteAnim = useRef(new Animated.Value(300)).current;
+  const deleteAnim = useRef(new Animated.Value(600)).current;
+  const deleteBackdropAnim = useRef(new Animated.Value(0)).current;
 
   const handleDeleteOngoingLends = async (customerId: number) => {
     try {
@@ -39,20 +40,45 @@ export default function HomeScreen() {
   };
 
 
-  const openDeleteModal = (id: number) => {
+  const openDeleteModal = useCallback((id: number) => {
     setDeleteId(id);
     setDeleteModalMounted(true);
-    deleteAnim.setValue(300);
-    Animated.timing(deleteAnim, { toValue: 0, duration: 250, useNativeDriver: true }).start();
-  };
+    deleteAnim.setValue(600);
+    deleteBackdropAnim.setValue(0);
+    Animated.parallel([
+      Animated.spring(deleteAnim, {
+        toValue: 0,
+        damping: 28,
+        stiffness: 300,
+        useNativeDriver: true
+      }),
+      Animated.timing(deleteBackdropAnim, {
+        toValue: 1,
+        duration: 120,
+        useNativeDriver: true
+      })
+    ]).start();
+  }, [deleteAnim, deleteBackdropAnim]);
 
-  const closeDeleteModal = (cb?: () => void) => {
-    Animated.timing(deleteAnim, { toValue: 300, duration: 200, useNativeDriver: true }).start(() => {
+  const closeDeleteModal = useCallback((cb?: () => void) => {
+    Animated.parallel([
+      Animated.spring(deleteAnim, {
+        toValue: 600,
+        damping: 32,
+        stiffness: 350,
+        useNativeDriver: true
+      }),
+      Animated.timing(deleteBackdropAnim, {
+        toValue: 0,
+        duration: 120,
+        useNativeDriver: true
+      })
+    ]).start(() => {
       setDeleteModalMounted(false);
       setDeleteId(null);
       cb?.();
     });
-  };
+  }, [deleteAnim, deleteBackdropAnim]);
 
   useFocusEffect(
     useCallback(() => {
@@ -109,11 +135,16 @@ export default function HomeScreen() {
     return colors[index];
   };
 
-  const renderItem = ({ item }: { item: Customer }) => {
-    const stats = customerStats[item.id] ?? { totalOngoing: 0, interestBadge: null, latestDate: null, lendCount: 0 };
-    const amountAbs = Math.abs(item.balance || 0).toFixed(2);
-    const avatarColor = getAvatarColor(item.name);
-    
+  const CustomerCard = React.memo(({ item, stats, router, openDeleteModal }: { item: Customer, stats: any, router: any, openDeleteModal: (id: number) => void }) => {
+    const avatarColor = useMemo(() => {
+      const colors = [
+        'bg-sky-400', 'bg-emerald-400', 'bg-violet-400',
+        'bg-amber-400', 'bg-rose-400', 'bg-teal-400'
+      ];
+      const index = item.name.charCodeAt(0) % colors.length;
+      return colors[index];
+    }, [item.name]);
+
     return (
       <View className="rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
         <Pressable
@@ -125,12 +156,9 @@ export default function HomeScreen() {
           delayLongPress={500}
           className="flex-row items-center p-5 active:bg-gray-50 dark:active:bg-gray-800/50"
         >
-          {/* Left — Avatar */}
           <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${avatarColor} shadow-sm`}>
             <Text className="text-white font-bold text-lg">{item.name.charAt(0).toUpperCase()}</Text>
           </View>
- 
-          {/* Center — Name Info */}
           <View className="flex-1">
             <Text className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-[2px] font-black mb-0.5">Customer</Text>
             <Text className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight leading-tight">{item.name}</Text>
@@ -141,19 +169,22 @@ export default function HomeScreen() {
               </View>
             )}
           </View>
- 
-          {/* Right — Amount */}
           <View className="items-end mr-2">
             <Text className="text-[8px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-black mb-1">Balance</Text>
-            <Text className={`text-xl font-black ${item.balance > 0 ? 'text-red-500' : 'text-gray-900 dark:text-gray-100'}`}>
-              ₱{amountAbs}
+            <Text className={`text-xl font-black ${item.balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+              ₱{Math.abs(item.balance || 0).toFixed(2)}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
         </Pressable>
       </View>
     );
-  };
+  });
+
+  const renderItem = useCallback(({ item }: { item: Customer }) => {
+    const stats = customerStats[item.id] ?? { totalOngoing: 0, interestBadge: null, latestDate: null, lendCount: 0 };
+    return <CustomerCard item={item} stats={stats} router={router} openDeleteModal={openDeleteModal} />;
+  }, [customerStats, router, openDeleteModal]);
 
   return (
     <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={['top']}>
@@ -165,6 +196,10 @@ export default function HomeScreen() {
           { paddingBottom: 100 },
           activeCustomers.length === 0 && { flexGrow: 1, justifyContent: 'center' }
         ]}
+        windowSize={5}
+        removeClippedSubviews={true}
+        initialNumToRender={6}
+        maxToRenderPerBatch={10}
         ListHeaderComponent={
           <View className={activeCustomers.length === 0 ? 'mb-4' : ''}>
             {userName ? <Text className="text-xl font-black text-gray-900 dark:text-gray-100 px-5 pt-4 pb-2 text-center">{`Hey, ${userName}`}</Text> : null}
@@ -176,7 +211,7 @@ export default function HomeScreen() {
                 ₱{grandTotal.toFixed(2)}
               </Text>
             </View>
-            
+
             {activeCustomers.length > 0 && (
               <Text className="text-[10px] font-black uppercase tracking-[2px] text-gray-400 dark:text-gray-500 px-6 mt-4 mb-2">Active Tabs</Text>
             )}
@@ -197,39 +232,41 @@ export default function HomeScreen() {
         }
       />
 
-        {/* Delete Confirmation Modal */}
-        <Modal visible={deleteModalMounted} transparent animationType="none" onRequestClose={() => closeDeleteModal()}>
-          <View className="flex-1">
-            <Pressable className="absolute inset-0 bg-black/50" onPress={() => closeDeleteModal()} />
-            <Animated.View
-              style={{ transform: [{ translateY: deleteAnim }] }}
-              className="absolute bottom-0 w-full bg-white dark:bg-gray-900 rounded-t-3xl px-6 pt-6 pb-12"
-            >
-              <View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-8" />
-
-              <View className="mb-8">
-                <Text className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Clear Transaction?</Text>
-                <Text className="text-gray-500 dark:text-gray-400">This will remove the ongoing lend without deleting the contact. This action cannot be undone.</Text>
-              </View>
-
-              <View className="gap-4">
-                <Pressable
-                  onPress={() => closeDeleteModal(() => { if (deleteId) handleDeleteOngoingLends(deleteId); })}
-                  className="w-full bg-rose-500 p-5 rounded-2xl items-center justify-center active:bg-rose-600"
-                >
-                  <Text className="text-white font-bold text-lg">Clear Lend</Text>
-                </Pressable>
-
-                <Pressable
-                  onPress={() => closeDeleteModal()}
-                  className="w-full p-4 items-center justify-center active:opacity-60"
-                >
-                  <Text className="text-gray-400 dark:text-gray-500 font-semibold text-lg">Cancel</Text>
-                </Pressable>
-              </View>
-            </Animated.View>
-          </View>
-        </Modal>
+      {/* Delete Confirmation Overlay (Custom instead of Modal) */}
+      {deleteModalMounted && (
+        <View className="absolute inset-0 z-[1000] justify-end">
+          <Animated.View
+            style={{ opacity: deleteBackdropAnim }}
+            className="absolute inset-0 bg-black/50"
+          >
+            <Pressable className="flex-1" onPress={() => closeDeleteModal()} />
+          </Animated.View>
+          <Animated.View
+            style={{ transform: [{ translateY: deleteAnim }] }}
+            className="w-full bg-white dark:bg-gray-900 rounded-t-3xl px-6 pt-6 pb-12 border-t border-gray-100 dark:border-gray-800"
+          >
+            <View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-8" />
+            <View className="mb-8">
+              <Text className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Clear Transaction?</Text>
+              <Text className="text-gray-500 dark:text-gray-400">This will remove the ongoing lend without deleting the contact. This action cannot be undone.</Text>
+            </View>
+            <View className="gap-4">
+              <Pressable
+                onPress={() => closeDeleteModal(() => { if (deleteId) handleDeleteOngoingLends(deleteId); })}
+                className="w-full bg-rose-500 p-5 rounded-2xl items-center justify-center active:bg-rose-600"
+              >
+                <Text className="text-white font-bold text-lg">Clear Lend</Text>
+              </Pressable>
+              <Pressable
+                onPress={() => closeDeleteModal()}
+                className="w-full p-4 items-center justify-center active:opacity-60"
+              >
+                <Text className="text-gray-400 dark:text-gray-500 font-semibold text-lg">Cancel</Text>
+              </Pressable>
+            </View>
+          </Animated.View>
+        </View>
+      )}
     </SafeAreaView>
   );
 }

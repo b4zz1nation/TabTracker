@@ -132,6 +132,12 @@ export function useLends() {
     );
   }, [db]);
 
+  const getAllPayments = useCallback(async () => {
+    return await db.getAllAsync<{ id: number; amount: number; created_at: string; lend_id: number }>(
+      'SELECT * FROM payments ORDER BY created_at DESC'
+    );
+  }, [db]);
+
   useEffect(() => {
     fetchAllLends();
   }, [fetchAllLends]);
@@ -145,7 +151,8 @@ export function useLends() {
     addPayment,
     getPayments,
     getPaymentsByCustomer,
+    getAllPayments,
     deleteLend,
     refresh: fetchAllLends,
-  }), [lends, isLoading, addLend, updateLend, completeLend, addPayment, getPayments, getPaymentsByCustomer, deleteLend, fetchAllLends]);
+  }), [lends, isLoading, addLend, updateLend, completeLend, addPayment, getPayments, getPaymentsByCustomer, getAllPayments, deleteLend, fetchAllLends]);
 }

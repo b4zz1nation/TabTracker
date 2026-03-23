@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState } from 'react';
-import { View, Text, FlatList, Pressable, Animated } from 'react-native';
+import { View, Text, FlatList, Pressable, Animated, Easing } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -7,6 +7,31 @@ import * as Haptics from 'expo-haptics';
 import ScreenContainer from '@/components/screen-container';
 import { useLends } from '@/hooks/use-lends';
 import { useCustomers } from '@/hooks/use-customers';
+
+const ActivityRow = React.memo(({ act }: { act: any }) => {
+  const getIcon = (type: string) => {
+    if (type === 'success') return { name: 'checkmark-done-circle', color: '#10b981', bg: 'bg-emerald-100 dark:bg-emerald-900/40' };
+    if (type === 'payment') return { name: 'cash-outline', color: '#0ea5e9', bg: 'bg-sky-100 dark:bg-sky-900/40' };
+    return { name: 'add-circle', color: '#8b5cf6', bg: 'bg-violet-100 dark:bg-violet-900/40' };
+  };
+  const icon = getIcon(act.type);
+  return (
+    <View className="flex-row items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
+      <View className="flex-row items-center flex-1">
+        <View className={`w-8 h-8 rounded-full items-center justify-center mr-3 ${icon.bg}`}>
+          <Ionicons name={icon.name as any} size={16} color={icon.color} />
+        </View>
+        <View className="flex-1">
+          <Text className="text-[11px] font-black text-gray-900 dark:text-gray-100" numberOfLines={1}>{act.title}</Text>
+          <Text className="text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-tight">
+            {new Date(act.date).toLocaleDateString()} • {new Date(act.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+          </Text>
+        </View>
+      </View>
+      <Text className="text-[12px] font-black text-gray-900 dark:text-gray-100 ml-2">{act.subtitle}</Text>
+    </View>
+  );
+});
 
 const LogCard = React.memo(({ group }: { group: any }) => {
   const router = useRouter();
@@ -16,23 +41,22 @@ const LogCard = React.memo(({ group }: { group: any }) => {
 
   const toggle = () => {
     const toValue = isExpanded ? 0 : 1;
-    
-    // Split: useNativeDriver=true for rotation, false for height
     Animated.parallel([
       Animated.spring(expandAnim, {
         toValue,
-        tension: 50,
-        friction: 8,
+        damping: 28,
+        stiffness: 300,
         useNativeDriver: false,
       }),
       Animated.spring(rotateAnim, {
         toValue,
-        tension: 50,
-        friction: 8,
+        damping: 28,
+        stiffness: 300,
         useNativeDriver: true,
       })
-    ]).start();
-    setIsExpanded(!isExpanded);
+    ]).start(({ finished }) => {
+      if (finished) setIsExpanded(!isExpanded);
+    });
   };
 
   const rotation = rotateAnim.interpolate({
@@ -42,14 +66,8 @@ const LogCard = React.memo(({ group }: { group: any }) => {
 
   const height = expandAnim.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 400] 
+    outputRange: [0, 600] 
   });
-
-  const getIcon = (type: string) => {
-    if (type === 'success') return { name: 'checkmark-done-circle', color: '#10b981', bg: 'bg-emerald-100 dark:bg-emerald-900/40' };
-    if (type === 'payment') return { name: 'cash-outline', color: '#0ea5e9', bg: 'bg-sky-100 dark:bg-sky-900/40' };
-    return { name: 'add-circle', color: '#8b5cf6', bg: 'bg-violet-100 dark:bg-violet-900/40' };
-  };
 
   return (
     <View className="mx-4 mb-4">
@@ -89,23 +107,9 @@ const LogCard = React.memo(({ group }: { group: any }) => {
           <View className="bg-gray-50 dark:bg-gray-800/20 px-4 pt-2 pb-5 border-t border-gray-50 dark:border-gray-800/50">
              <Text className="text-[8px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-[3px] mb-3 mt-2 ml-1 text-center font-mono">--- Activity Sequence ---</Text>
              <View className="gap-2">
-               {group.activities.map((act: any) => {
-                 const icon = getIcon(act.type);
-                 return (
-                   <View key={act.id} className="flex-row items-center justify-between p-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm">
-                      <View className="flex-row items-center">
-                        <View className={`w-8 h-8 rounded-full items-center justify-center mr-3 ${icon.bg}`}>
-                          <Ionicons name={icon.name as any} size={16} color={icon.color} />
-                        </View>
-                        <View>
-                          <Text className="text-[11px] font-black text-gray-900 dark:text-gray-100">{act.title}</Text>
-                          <Text className="text-[9px] text-gray-400 dark:text-gray-500 font-bold uppercase tracking-tight">{new Date(act.date).toLocaleDateString()} • {new Date(act.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</Text>
-                        </View>
-                      </View>
-                      <Text className="text-[12px] font-black text-gray-900 dark:text-gray-100">{act.subtitle}</Text>
-                   </View>
-                 );
-               })}
+               {group.activities.map((act: any) => (
+                 <ActivityRow key={act.id} act={act} />
+               ))}
              </View>
              <Pressable 
                 onPress={() => router.push(`/lend-details/${group.lend.id}`)}
@@ -122,7 +126,7 @@ const LogCard = React.memo(({ group }: { group: any }) => {
 });
 
 export default function LogsScreen() {
-  const { lends, refresh: refreshLends, getPaymentsByCustomer } = useLends();
+  const { lends, refresh: refreshLends, getAllPayments } = useLends();
   const { customers, refresh: refreshCustomers } = useCustomers();
   const [allPayments, setAllPayments] = useState<any[]>([]);
 
@@ -130,11 +134,10 @@ export default function LogsScreen() {
     refreshLends();
     refreshCustomers();
     
-    const paymentsBatch = await Promise.all(
-      customers.map(c => getPaymentsByCustomer(c.id))
-    );
-    setAllPayments(paymentsBatch.flat());
-  }, [refreshLends, refreshCustomers, customers, getPaymentsByCustomer]);
+    // Batch fetch all payments efficiently
+    const payments = await getAllPayments();
+    setAllPayments(payments);
+  }, [refreshLends, refreshCustomers, getAllPayments]);
 
   useFocusEffect(
     useCallback(() => {
@@ -206,6 +209,10 @@ export default function LogsScreen() {
         keyExtractor={item => item.lend.id.toString()}
         renderItem={({ item }) => <LogCard group={item} />}
         contentContainerStyle={{ paddingVertical: 10 }}
+        windowSize={5}
+        removeClippedSubviews={true}
+        initialNumToRender={8}
+        maxToRenderPerBatch={10}
         ListEmptyComponent={
           <View className="items-center mt-20 gap-3">
             <Ionicons name="journal-outline" size={64} color="#d1d5db" />

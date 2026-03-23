@@ -110,3 +110,9 @@ To prevent breaking the app's core navigation, onboarding, and payment logic, al
 - **Balance Clamping:** The entered payment amount must never exceed the remaining balance.
 - **Auto-Correction:** If the input exceeds the balance, automatically clamp the value to the max balance and trigger `Haptics` for feedback. 
 - **Button State:** Always disable or dim the confirm button if the input is empty or zero.
+113: 
+114: ### 6. Animation Standards
+115: - **Critically-Damped Springs:** All modal-like slides and transitions MUST use `Animated.spring` with a high damping-to-stiffness ratio (typically `damping: 28`, `stiffness: 300`). 
+116: - **No Bounce Policy:** Animations should feel organic and smooth (spring physics) but have EXACTLY zero overshoot or "boing" effect. 
+117: - **Native Threading:** Always set `useNativeDriver: true` for all transforms and opacity animations to ensure 60FPS performance on both iOS and Android.
+118: - **Snappy Feedback:** Aim for perceived completion within 150-200ms.
