@@ -151,6 +151,33 @@ export default function CustomerDetailScreen() {
     });
   };
 
+  const handleAddPayment = () => {
+    if (!selectedLend) return;
+    const l = selectedLend;
+    
+    // Calculate current balance for the payment screen
+    const start = new Date(l.created_at);
+    const now = new Date();
+    const diff = now.getTime() - start.getTime();
+    const dayMs = 1000 * 60 * 60 * 24;
+    let intervals = 0;
+    if (l.interest_type === 'Daily') intervals = Math.floor(diff / dayMs);
+    else if (l.interest_type === 'Monthly') intervals = Math.floor(diff / (dayMs * 30.4375));
+    else if (l.interest_type === 'Yearly') intervals = Math.floor(diff / (dayMs * 365.25));
+    const interest = (l.amount * ((l.interest_rate || 0) / 100)) * intervals;
+    const total = l.amount + interest;
+
+    closeSheet(() => {
+      router.push({
+        pathname: '/add-payment',
+        params: { 
+          lendId: l.id, 
+          currentBalance: total.toFixed(2)
+        },
+      });
+    });
+  };
+
   const handleCompleteLend = async () => {
     if (!selectedLend) return;
     await completeLend(selectedLend.id);
@@ -340,6 +367,17 @@ export default function CustomerDetailScreen() {
                      <Ionicons name="trending-up" size={20} color="#f59e0b" />
                    </View>
                    <Text className="text-base font-semibold text-gray-900 dark:text-gray-100 flex-1">View Accumulation</Text>
+                   <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
+                 </Pressable>
+               )}
+
+               {/* Add Payment (only for Ongoing) */}
+               {selectedLend?.status === 'Ongoing' && (
+                 <Pressable onPress={handleAddPayment} className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800 active:bg-gray-200 dark:active:bg-gray-700">
+                   <View className="w-10 h-10 rounded-full items-center justify-center bg-sky-100 dark:bg-sky-900/40 mr-4">
+                     <Ionicons name="cash-outline" size={20} color="#0ea5e9" />
+                   </View>
+                   <Text className="text-base font-semibold text-gray-900 dark:text-gray-100 flex-1">Add Payment</Text>
                    <Ionicons name="chevron-forward" size={18} color="#9ca3af" />
                  </Pressable>
                )}

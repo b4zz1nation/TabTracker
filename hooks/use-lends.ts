@@ -73,9 +73,56 @@ export function useLends() {
     await fetchAllLends();
   };
 
+  const addPayment = async (lendId: number, paymentAmount: number) => {
+    const lend = lends.find((l) => l.id === lendId);
+    if (!lend) return;
+
+    const now = new Date().toISOString();
+    const newAmount = lend.amount - paymentAmount;
+
+    // 1. Record payment
+    await db.runAsync(
+      'INSERT INTO payments (lend_id, amount, created_at) VALUES (?, ?, ?)',
+      [lendId, paymentAmount, now]
+    );
+
+    // 2. Update lend amount
+    if (newAmount <= 0) {
+      await db.runAsync(
+        "UPDATE lends SET amount = 0, status = 'Completed', completed_at = ? WHERE id = ?",
+        [now, lendId]
+      );
+    } else {
+      await db.runAsync(
+        'UPDATE lends SET amount = ? WHERE id = ?',
+        [newAmount, lendId]
+      );
+    }
+
+    // 3. Update customer balance (sum of all ongoing lends)
+    const ongoingLends = await db.getAllAsync<{ amount: number }>(
+      "SELECT amount FROM lends WHERE customer_id = ? AND status = 'Ongoing'",
+      [lend.customer_id]
+    );
+    const newTotalBalance = ongoingLends.reduce((sum, l) => sum + l.amount, 0);
+    await db.runAsync(
+      'UPDATE customers SET balance = ? WHERE id = ?',
+      [newTotalBalance, lend.customer_id]
+    );
+
+    await fetchAllLends();
+  };
+
   const deleteLend = async (id: number) => {
     await db.runAsync('DELETE FROM lends WHERE id = ?', [id]);
     await fetchAllLends();
+  };
+
+  const getPayments = async (lendId: number) => {
+    return await db.getAllAsync<{ id: number; amount: number; created_at: string }>(
+      'SELECT * FROM payments WHERE lend_id = ? ORDER BY created_at DESC',
+      [lendId]
+    );
   };
 
   useEffect(() => {
@@ -88,6 +135,8 @@ export function useLends() {
     addLend,
     updateLend,
     completeLend,
+    addPayment,
+    getPayments,
     deleteLend,
     refresh: fetchAllLends,
   };
