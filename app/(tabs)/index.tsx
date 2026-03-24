@@ -4,44 +4,152 @@ import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useSQLiteContext } from 'expo-sqlite';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, FlatList, Pressable, Text, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { Animated, FlatList, Pressable, Text, View, useWindowDimensions } from 'react-native';
+import ScreenContainer from '@/components/screen-container';
 
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { Customer, useCustomers } from '@/hooks/use-customers';
+import { Creditor, useCreditors } from '@/hooks/use-creditors';
 import { useLends } from '@/hooks/use-lends';
 import { getUserProfile } from '@/services/user-profile';
+
+const AVATAR_COLORS = [
+  'bg-sky-400', 'bg-emerald-400', 'bg-violet-400',
+  'bg-amber-400', 'bg-rose-400', 'bg-teal-400'
+];
+
+const CREDITOR_AVATAR_COLORS = [
+  'bg-orange-400', 'bg-amber-400', 'bg-yellow-400',
+];
+
+const CustomerCard = React.memo(({ item, stats, router, openDeleteModal }: { item: Customer, stats: any, router: any, openDeleteModal: (id: number) => void }) => {
+  const avatarColor = useMemo(() => {
+    const index = item.name.charCodeAt(0) % AVATAR_COLORS.length;
+    return AVATAR_COLORS[index];
+  }, [item.name]);
+
+  const handlePress = useCallback(() => router.push(`/customer/${item.id}`), [router, item.id]);
+  const handleLongPress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    openDeleteModal(item.id);
+  }, [openDeleteModal, item.id]);
+
+  return (
+    <View className="rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+      <Pressable
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        delayLongPress={500}
+        className="flex-row items-center p-5 active:bg-gray-50 dark:active:bg-gray-800/50"
+      >
+        <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${avatarColor} shadow-sm`}>
+          <Text className="text-white font-bold text-lg">{item.name.charAt(0).toUpperCase()}</Text>
+        </View>
+        <View className="flex-1">
+          <Text className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-[2px] font-black mb-0.5">Customer</Text>
+          <Text className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight leading-tight">{item.name}</Text>
+          {stats.interestBadge && (
+            <View className="flex-row items-center mt-1">
+              <Ionicons name="trending-up" size={12} color="#0ea5e9" style={{ marginRight: 4 }} />
+              <Text className="text-[10px] text-sky-500 font-bold uppercase">{stats.interestBadge}</Text>
+            </View>
+          )}
+        </View>
+        <View className="items-end mr-2">
+          <Text className="text-[8px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-black mb-1">Balance</Text>
+          <Text className={`text-xl font-black ${item.balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
+            ₱{Math.abs(item.balance || 0).toFixed(2)}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+      </Pressable>
+    </View>
+  );
+});
+
+const CreditorCard = React.memo(({ item, router, openDeleteModal }: { item: Creditor, router: any, openDeleteModal: (id: number) => void }) => {
+  const avatarColor = useMemo(() => {
+    const index = item.name.charCodeAt(0) % CREDITOR_AVATAR_COLORS.length;
+    return CREDITOR_AVATAR_COLORS[index];
+  }, [item.name]);
+
+  const handlePress = useCallback(() => {
+    router.push({ pathname: '/my-tab-modal', params: { id: item.id } });
+  }, [router, item.id]);
+
+  const handleLongPress = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    openDeleteModal(item.id);
+  }, [openDeleteModal, item.id]);
+
+  return (
+    <View className="rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+      <Pressable
+        onPress={handlePress}
+        onLongPress={handleLongPress}
+        delayLongPress={500}
+        className="flex-row items-center p-5 active:bg-gray-50 dark:active:bg-gray-800/50"
+      >
+        <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${avatarColor} shadow-sm`}>
+          <Text className="text-white font-bold text-lg">{item.name.charAt(0).toUpperCase()}</Text>
+        </View>
+        <View className="flex-1">
+          <Text className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-[2px] font-black mb-0.5">Creditor</Text>
+          <Text className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight leading-tight">{item.name}</Text>
+        </View>
+        <View className="items-end mr-2">
+          <Text className="text-[8px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-black mb-1">You Owe</Text>
+          <Text className="text-xl font-black text-orange-500">
+            ₱{(item.balance || 0).toFixed(2)}
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
+      </Pressable>
+    </View>
+  );
+});
 
 export default function HomeScreen() {
   const { customers, refresh: refreshCustomers } = useCustomers();
   const { lends, refresh: refreshLends } = useLends();
+  const { creditors, refresh: refreshCreditors, deleteCreditor } = useCreditors();
   const db = useSQLiteContext();
-  const colorScheme = useColorScheme();
   const router = useRouter();
+  const { width } = useWindowDimensions();
 
   const [userName, setUserName] = useState('');
+  const [activePage, setActivePage] = useState(0);
+  const flatRef = useRef<FlatList>(null);
+  const indicatorAnim = useRef(new Animated.Value(0)).current;
 
+  // Modals for deletes
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteModalType, setDeleteModalType] = useState<'customer' | 'creditor'>('customer');
   const [deleteModalMounted, setDeleteModalMounted] = useState(false);
   const deleteAnim = useRef(new Animated.Value(600)).current;
   const deleteBackdropAnim = useRef(new Animated.Value(0)).current;
 
-  const handleDeleteOngoingLends = async (customerId: number) => {
+  const handleDelete = async () => {
+    if (!deleteId) return;
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      await db.runAsync("DELETE FROM lends WHERE customer_id = ? AND status = 'Ongoing'", [customerId]);
-      await db.runAsync('UPDATE customers SET balance = 0 WHERE id = ?', [customerId]);
-      await refreshCustomers();
-      await refreshLends();
+      if (deleteModalType === 'customer') {
+        await db.runAsync("DELETE FROM lends WHERE customer_id = ? AND status = 'Ongoing'", [deleteId]);
+        await db.runAsync('UPDATE customers SET balance = 0 WHERE id = ?', [deleteId]);
+        await refreshCustomers();
+        await refreshLends();
+      } else {
+        await deleteCreditor(deleteId);
+      }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
       console.error(err);
     }
   };
 
-
-  const openDeleteModal = useCallback((id: number) => {
+  const openDeleteModal = useCallback((id: number, type: 'customer' | 'creditor' = 'customer') => {
     setDeleteId(id);
+    setDeleteModalType(type);
     setDeleteModalMounted(true);
     deleteAnim.setValue(600);
     deleteBackdropAnim.setValue(0);
@@ -84,8 +192,9 @@ export default function HomeScreen() {
     useCallback(() => {
       refreshCustomers();
       refreshLends();
+      refreshCreditors();
       setDeleteModalMounted(false);
-    }, [refreshCustomers, refreshLends])
+    }, [refreshCustomers, refreshLends, refreshCreditors])
   );
 
   useEffect(() => {
@@ -95,9 +204,9 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // Pre-compute per-customer stats from lends
+  // Stats calculation
   const customerStats = useMemo(() => {
-    const map: Record<number, { totalOngoing: number; interestBadge: string | null; latestDate: string | null; lendCount: number }> = {};
+    const map: Record<number, any> = {};
     for (const c of customers) {
       const cLends = lends.filter((l) => l.customer_id === c.id && l.status === 'Ongoing');
       const total = cLends.reduce((s, l) => s + l.amount, 0);
@@ -106,18 +215,13 @@ export default function HomeScreen() {
       const badge = withInterest
         ? `${withInterest.interest_rate}% / ${freqShort[withInterest.interest_type!] ?? withInterest.interest_type}`
         : null;
-      // Latest lend date
-      const sorted = cLends.slice().sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-      const latestDate = sorted.length > 0 ? sorted[0].created_at : null;
-      map[c.id] = { totalOngoing: total, interestBadge: badge, latestDate, lendCount: cLends.length };
+      map[c.id] = { totalOngoing: total, interestBadge: badge, lendCount: cLends.length };
     }
     return map;
   }, [customers, lends]);
 
-  const grandTotal = useMemo(
-    () => customers.reduce((s, c) => s + (c.balance || 0), 0),
-    [customers]
-  );
+  const grandTotal = useMemo(() => customers.reduce((s, c) => s + (c.balance || 0), 0), [customers]);
+  const totalIOWe = useMemo(() => creditors.reduce((s, c) => s + (c.balance || 0), 0), [creditors]);
 
   const activeCustomers = useMemo(() => {
     return customers.filter((c) => {
@@ -126,113 +230,161 @@ export default function HomeScreen() {
     });
   }, [customers, customerStats]);
 
-  const getAvatarColor = (name: string) => {
-    const colors = [
-      'bg-sky-400', 'bg-emerald-400', 'bg-violet-400',
-      'bg-amber-400', 'bg-rose-400', 'bg-teal-400'
-    ];
-    const index = name.charCodeAt(0) % colors.length;
-    return colors[index];
+  const onMomentumScrollEnd = (e: any) => {
+    const newPage = Math.round(e.nativeEvent.contentOffset.x / width);
+    if (newPage !== activePage) {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      setActivePage(newPage);
+      Animated.spring(indicatorAnim, {
+        toValue: newPage,
+        damping: 28,
+        stiffness: 300,
+        useNativeDriver: true
+      }).start();
+    }
   };
 
-  const CustomerCard = React.memo(({ item, stats, router, openDeleteModal }: { item: Customer, stats: any, router: any, openDeleteModal: (id: number) => void }) => {
-    const avatarColor = useMemo(() => {
-      const colors = [
-        'bg-sky-400', 'bg-emerald-400', 'bg-violet-400',
-        'bg-amber-400', 'bg-rose-400', 'bg-teal-400'
-      ];
-      const index = item.name.charCodeAt(0) % colors.length;
-      return colors[index];
-    }, [item.name]);
+  const scrollToPage = (page: number) => {
+    flatRef.current?.scrollToOffset({ offset: page * width, animated: true });
+    setActivePage(page);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    Animated.spring(indicatorAnim, {
+      toValue: page,
+      damping: 28,
+      stiffness: 300,
+      useNativeDriver: true
+    }).start();
+  };
 
-    return (
-      <View className="rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
-        <Pressable
-          onPress={() => router.push(`/customer/${item.id}`)}
-          onLongPress={() => {
-            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-            openDeleteModal(item.id);
-          }}
-          delayLongPress={500}
-          className="flex-row items-center p-5 active:bg-gray-50 dark:active:bg-gray-800/50"
-        >
-          <View className={`w-12 h-12 rounded-full items-center justify-center mr-4 ${avatarColor} shadow-sm`}>
-            <Text className="text-white font-bold text-lg">{item.name.charAt(0).toUpperCase()}</Text>
-          </View>
-          <View className="flex-1">
-            <Text className="text-[10px] text-gray-400 dark:text-gray-500 uppercase tracking-[2px] font-black mb-0.5">Customer</Text>
-            <Text className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight leading-tight">{item.name}</Text>
-            {stats.interestBadge && (
-              <View className="flex-row items-center mt-1">
-                <Ionicons name="trending-up" size={12} color="#0ea5e9" style={{ marginRight: 4 }} />
-                <Text className="text-[10px] text-sky-500 font-bold uppercase">{stats.interestBadge}</Text>
-              </View>
-            )}
-          </View>
-          <View className="items-end mr-2">
-            <Text className="text-[8px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-black mb-1">Balance</Text>
-            <Text className={`text-xl font-black ${item.balance > 0 ? 'text-red-500' : 'text-emerald-500'}`}>
-              ₱{Math.abs(item.balance || 0).toFixed(2)}
-            </Text>
-          </View>
-          <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
-        </Pressable>
-      </View>
-    );
-  });
-
-  const renderItem = useCallback(({ item }: { item: Customer }) => {
-    const stats = customerStats[item.id] ?? { totalOngoing: 0, interestBadge: null, latestDate: null, lendCount: 0 };
-    return <CustomerCard item={item} stats={stats} router={router} openDeleteModal={openDeleteModal} />;
-  }, [customerStats, router, openDeleteModal]);
-
-  return (
-    <SafeAreaView className="flex-1 bg-gray-50 dark:bg-gray-950" edges={['top']}>
+  const renderCollectPage = () => (
+    <View style={{ width }}>
       <FlatList
         data={activeCustomers}
-        keyExtractor={(item) => item.id.toString()}
-        renderItem={renderItem}
-        contentContainerStyle={[
-          { paddingBottom: 100 },
-          activeCustomers.length === 0 && { flexGrow: 1, justifyContent: 'center' }
-        ]}
-        windowSize={5}
-        removeClippedSubviews={true}
-        initialNumToRender={6}
-        maxToRenderPerBatch={10}
-        ListHeaderComponent={
-          <View className={activeCustomers.length === 0 ? 'mb-4' : ''}>
-            {userName ? <Text className="text-xl font-black text-gray-900 dark:text-gray-100 px-5 pt-4 pb-2 text-center">{`Hey, ${userName}`}</Text> : null}
-
-            {/* Summary */}
-            <View className="m-4 p-8 rounded-[40px] items-center justify-center bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm">
-              <Text className="text-[10px] font-black uppercase tracking-[4px] text-gray-400 dark:text-gray-500 mb-3">Total Owed to You</Text>
-              <Text className={`text-6xl font-black ${grandTotal > 0 ? 'text-red-500' : 'text-emerald-500'} tracking-tighter`}>
-                ₱{grandTotal.toFixed(2)}
-              </Text>
-            </View>
-
-            {activeCustomers.length > 0 && (
-              <Text className="text-[10px] font-black uppercase tracking-[2px] text-gray-400 dark:text-gray-500 px-6 mt-4 mb-2">Active Tabs</Text>
-            )}
-          </View>
-        }
+        keyExtractor={(item) => `customer-${item.id}`}
+        renderItem={({ item }) => (
+          <CustomerCard 
+            item={item} 
+            stats={customerStats[item.id] || {}} 
+            router={router} 
+            openDeleteModal={(id) => openDeleteModal(id, 'customer')} 
+          />
+        )}
+        contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
+        keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
-          <View className="items-center gap-6 px-10">
+          <View className="items-center mt-20 gap-6 px-10">
             <View className="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-800 items-center justify-center">
               <Ionicons name="people-outline" size={40} color="#d1d5db" />
             </View>
             <View>
               <Text className="text-gray-900 dark:text-gray-100 text-xl font-bold text-center mb-2">No Active Tabs</Text>
-              <Text className="text-gray-400 dark:text-gray-500 text-center leading-relaxed">
-                Your lending dashboard is empty. Tap the center **+** to start tracking your first lend!
+              <Text className="text-gray-400 dark:text-gray-500 text-center leading-relaxed font-medium">
+                Your lending dashboard is empty. Tap the center **+** to track a lend.
               </Text>
             </View>
           </View>
         }
       />
+    </View>
+  );
 
-      {/* Delete Confirmation Overlay (Custom instead of Modal) */}
+  const renderMyTabPage = () => (
+    <View style={{ width }}>
+      <FlatList
+        data={creditors}
+        keyExtractor={(item) => `creditor-${item.id}`}
+        renderItem={({ item }) => (
+          <CreditorCard 
+            item={item} 
+            router={router} 
+            openDeleteModal={(id) => openDeleteModal(id, 'creditor')} 
+          />
+        )}
+        contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
+        keyboardShouldPersistTaps="handled"
+        ListEmptyComponent={
+          <View className="items-center mt-20 gap-6 px-10">
+            <View className="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-800 items-center justify-center">
+              <Ionicons name="wallet-outline" size={40} color="#d1d5db" />
+            </View>
+            <View>
+              <Text className="text-gray-900 dark:text-gray-100 text-xl font-bold text-center mb-2">No Tabs Yet</Text>
+              <Text className="text-gray-400 dark:text-gray-500 text-center leading-relaxed font-bold">
+                You're debt-free! Tap the **+** button to track a new tab you borrowed.
+              </Text>
+            </View>
+          </View>
+        }
+      />
+      {/* Floating Add Button for creditors specifically on this page if needed, but per-page add is specified */}
+      <Pressable 
+        onPress={() => {
+            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+            router.push('/my-tab-modal');
+        }}
+        className="absolute bottom-24 right-6 w-14 h-14 rounded-full bg-orange-500 items-center justify-center shadow-xl shadow-orange-500/40 active:scale-95"
+      >
+        <Ionicons name="add" size={32} color="white" />
+      </Pressable>
+    </View>
+  );
+
+  const summaryHeader = (
+    <View className="bg-white dark:bg-zinc-900 px-5 py-4 border-b border-gray-100 dark:border-gray-800 shadow-sm flex-row items-center justify-between">
+      <View className="flex-1">
+        <Text className="text-[10px] font-black uppercase tracking-[2px] text-gray-400 dark:text-gray-500 mb-0.5">To Collect</Text>
+        <Text className="text-lg font-black text-sky-500 leading-tight">₱{grandTotal.toFixed(2)}</Text>
+      </View>
+      <View className="w-[1px] h-8 bg-gray-100 dark:bg-gray-800 mx-6" />
+      <View className="flex-1 items-end">
+        <Text className="text-[10px] font-black uppercase tracking-[2px] text-gray-400 dark:text-gray-500 mb-0.5">I Owe</Text>
+        <Text className="text-lg font-black text-orange-500 leading-tight">₱{totalIOWe.toFixed(2)}</Text>
+      </View>
+    </View>
+  );
+
+  const pages = [
+    { key: 'collect', render: renderCollectPage },
+    { key: 'mytab', render: renderMyTabPage }
+  ];
+
+  const indicatorTranslateX = indicatorAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 24]
+  });
+
+  return (
+    <ScreenContainer scrollable={false} header={summaryHeader}>
+      {/* Page Indicator */}
+      <View className="flex-row justify-center py-4 bg-gray-50 dark:bg-gray-950">
+        <View className="justify-center">
+            <View className="flex-row gap-4 h-2 items-center">
+                <View className="w-1.5 h-1.5 rounded-full bg-gray-200 dark:bg-gray-800" />
+                <View className="w-1.5 h-1.5 rounded-full bg-gray-200 dark:bg-gray-800" />
+                <Animated.View 
+                    style={{ 
+                        transform: [{ translateX: indicatorTranslateX }],
+                        backgroundColor: activePage === 0 ? '#0ea5e9' : '#f97316'
+                    }}
+                    className="absolute w-2 h-2 rounded-full" 
+                />
+            </View>
+        </View>
+      </View>
+
+      <FlatList
+        ref={flatRef}
+        horizontal
+        pagingEnabled
+        showsHorizontalScrollIndicator={false}
+        data={pages}
+        keyExtractor={(item) => item.key}
+        renderItem={({ item }) => item.render()}
+        onMomentumScrollEnd={onMomentumScrollEnd}
+        bounces={false}
+      />
+
+      {/* Delete Confirmation Overlay */}
       {deleteModalMounted && (
         <View className="absolute inset-0 z-[1000] justify-end">
           <Animated.View
@@ -246,27 +398,33 @@ export default function HomeScreen() {
             className="w-full bg-white dark:bg-gray-900 rounded-t-3xl px-6 pt-6 pb-12 border-t border-gray-100 dark:border-gray-800"
           >
             <View className="w-12 h-1.5 bg-gray-200 dark:bg-gray-800 rounded-full mx-auto mb-8" />
-            <View className="mb-8">
-              <Text className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">Clear Transaction?</Text>
-              <Text className="text-gray-500 dark:text-gray-400">This will remove the ongoing lend without deleting the contact. This action cannot be undone.</Text>
+            <View className="mb-8 px-2">
+              <Text className="text-2xl font-black text-gray-900 dark:text-gray-100 mb-2">
+                {deleteModalType === 'customer' ? 'Clear Transaction?' : 'Delete Creditor?'}
+              </Text>
+              <Text className="text-gray-500 dark:text-gray-400 font-medium">
+                {deleteModalType === 'customer' 
+                  ? 'This will remove the ongoing lend without deleting the contact. This action cannot be undone.' 
+                  : 'This will remove this entry and its balance permanently.'}
+              </Text>
             </View>
             <View className="gap-4">
               <Pressable
-                onPress={() => closeDeleteModal(() => { if (deleteId) handleDeleteOngoingLends(deleteId); })}
-                className="w-full bg-rose-500 p-5 rounded-2xl items-center justify-center active:bg-rose-600"
+                onPress={() => closeDeleteModal(() => handleDelete())}
+                className="w-full bg-rose-500 p-5 rounded-3xl items-center justify-center active:bg-rose-600 shadow-lg shadow-rose-500/20"
               >
-                <Text className="text-white font-bold text-lg">Clear Lend</Text>
+                <Text className="text-white font-black text-lg">{deleteModalType === 'customer' ? 'Clear Lend' : 'Delete Entry'}</Text>
               </Pressable>
               <Pressable
                 onPress={() => closeDeleteModal()}
                 className="w-full p-4 items-center justify-center active:opacity-60"
               >
-                <Text className="text-gray-400 dark:text-gray-500 font-semibold text-lg">Cancel</Text>
+                <Text className="text-gray-400 dark:text-gray-500 font-bold text-lg">Cancel</Text>
               </Pressable>
             </View>
           </Animated.View>
         </View>
       )}
-    </SafeAreaView>
+    </ScreenContainer>
   );
 }

@@ -71,6 +71,7 @@ export default function RootLayout() {
                     <Stack.Screen name="welcome" options={{ animation: 'fade', gestureEnabled: false }} />
                     <Stack.Screen name="(tabs)" />
                     <Stack.Screen name="modal" />
+                    <Stack.Screen name="my-tab-modal" options={{ presentation: 'modal' }} />
                     <Stack.Screen name="add-customer" />
                     <Stack.Screen name="add-lend" />
                     <Stack.Screen name="select-customer" />

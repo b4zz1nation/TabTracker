@@ -1,7 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 
 export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
-  const DATABASE_VERSION = 5;
+  const DATABASE_VERSION = 6;
   let result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
   let currentDbVersion = result?.user_version ?? 0;
 
@@ -95,6 +95,18 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
       );
     `);
     currentDbVersion = 5;
+  }
+
+  if (currentDbVersion < 6) {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS creditors (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        name TEXT NOT NULL,
+        balance REAL DEFAULT 0,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    currentDbVersion = 6;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

@@ -22,22 +22,18 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          display: 'flex',
           backgroundColor: themeColors.background,
           borderTopColor: colorScheme === 'dark' ? '#1f2937' : '#f3f4f6',
-          height: 60 + insets.bottom,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 10,
+          height: 64 + insets.bottom,
+          paddingBottom: insets.bottom > 0 ? insets.bottom : 12,
           paddingTop: 8,
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.1,
-          shadowRadius: 10,
-          elevation: 20,
+          borderTopWidth: 1,
         },
         tabBarLabelStyle: {
           fontSize: 10,
-          fontWeight: '700',
-          marginTop: 2,
+          fontWeight: '800',
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
         },
       }}>
       <Tabs.Screen
@@ -98,9 +94,15 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
+        name="my-tab"
+        options={{
+          tabBarButton: () => null,
+        }}
+      />
+      <Tabs.Screen
         name="explore"
         options={{
-          href: null,
+          tabBarButton: () => null,
         }}
       />
     </Tabs>
