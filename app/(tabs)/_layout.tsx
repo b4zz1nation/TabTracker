@@ -14,6 +14,9 @@ export default function TabLayout() {
   const themeColors = Colors[colorScheme ?? "light"];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const tabBarBottomOffset = insets.bottom + 12;
+  const tabBarHeight = 64;
+  const sceneBottomPadding = tabBarHeight + tabBarBottomOffset;
   const handleQuickAddPress = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     router.push("/quick-add");
@@ -23,15 +26,29 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         tabBarActiveTintColor: themeColors.tint,
+        tabBarInactiveTintColor: colorScheme === "dark" ? "#9ca3af" : "#6b7280",
         headerShown: false,
         tabBarButton: HapticTab,
+        tabBarItemStyle: {
+          borderRadius: 16,
+          marginHorizontal: 2,
+        },
+        sceneStyle: {
+          paddingBottom: sceneBottomPadding,
+        },
         tabBarStyle: {
-          backgroundColor: themeColors.background,
-          borderTopColor: colorScheme === "dark" ? "#1f2937" : "#f3f4f6",
-          height: 64 + insets.bottom,
-          paddingBottom: insets.bottom > 0 ? insets.bottom : 12,
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: tabBarBottomOffset,
+          height: tabBarHeight,
+          paddingBottom: 8,
           paddingTop: 8,
-          borderTopWidth: 1,
+          backgroundColor: "transparent",
+          shadowOpacity: 0,
+          shadowRadius: 0,
+          shadowOffset: { width: 0, height: 0 },
+          elevation: 0,
         },
         tabBarLabelStyle: {
           fontSize: 10,
@@ -75,13 +92,14 @@ export default function TabLayout() {
             <HapticTab {...props} onPress={handleQuickAddPress} />
           ),
           tabBarIcon: ({ color, focused }) => (
-            <View className="items-center justify-center -mt-8">
-              <View className="w-14 h-14 rounded-full bg-sky-500 items-center justify-center shadow-lg shadow-sky-500/50">
-                <Ionicons size={32} name="add" color="white" />
-              </View>
+            <View className="items-center justify-center">
+              <Ionicons
+                size={29}
+                name={focused ? "add-circle" : "add-circle-outline"}
+                color={color}
+              />
             </View>
           ),
-          tabBarLabel: () => null,
         }}
       />
       <Tabs.Screen

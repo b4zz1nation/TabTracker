@@ -136,7 +136,7 @@ const CreditorCard = React.memo(
     }, [item.name]);
 
     const handlePress = useCallback(() => {
-      router.push({ pathname: "/my-tab-modal", params: { id: item.id } });
+      router.push(`/creditor/${item.id}`);
     }, [router, item.id]);
 
     const handleLongPress = useCallback(() => {
@@ -330,6 +330,10 @@ export default function HomeScreen() {
     () => creditors.reduce((s, c) => s + (c.balance || 0), 0),
     [creditors],
   );
+  const activeCreditors = useMemo(
+    () => creditors.filter((c) => (c.balance || 0) > 0),
+    [creditors],
+  );
 
   const activeCustomers = useMemo(() => {
     return customers.filter((c) => {
@@ -367,6 +371,7 @@ export default function HomeScreen() {
         )}
         contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
         keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={collectListHeader}
         ListEmptyComponent={
           <View className="items-center mt-20 gap-6 px-10">
             <View className="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-800 items-center justify-center">
@@ -377,7 +382,7 @@ export default function HomeScreen() {
                 No Active Tabs
               </Text>
               <Text className="text-gray-400 dark:text-gray-500 text-center leading-relaxed font-medium">
-                Your lending dashboard is empty. Tap the center **+** to track a
+                Your lending dashboard is empty. Tap the center add to track a
                 lend.
               </Text>
             </View>
@@ -390,7 +395,7 @@ export default function HomeScreen() {
   const renderMyTabPage = () => (
     <View style={{ width }}>
       <FlatList
-        data={creditors}
+        data={activeCreditors}
         keyExtractor={(item) => `creditor-${item.id}`}
         renderItem={({ item }) => (
           <CreditorCard
@@ -401,6 +406,7 @@ export default function HomeScreen() {
         )}
         contentContainerStyle={{ paddingBottom: 100, paddingTop: 10 }}
         keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={myTabListHeader}
         ListEmptyComponent={
           <View className="items-center mt-20 gap-6 px-10">
             <View className="w-20 h-20 rounded-full bg-gray-100 dark:bg-gray-800 items-center justify-center">
@@ -411,7 +417,7 @@ export default function HomeScreen() {
                 No Tabs Yet
               </Text>
               <Text className="text-gray-400 dark:text-gray-500 text-center leading-relaxed font-bold">
-                You're debt-free! Tap the **+** button to track a new tab you
+                You're debt-free! Tap the add button to track a new tab you
                 borrowed.
               </Text>
             </View>
@@ -422,24 +428,48 @@ export default function HomeScreen() {
     </View>
   );
 
-  const summaryHeader = (
-    <View className="bg-white dark:bg-zinc-900 px-5 py-4 border-b border-gray-100 dark:border-gray-800 shadow-sm flex-row items-center justify-between">
-      <View className="flex-1">
-        <Text className="text-[10px] font-black uppercase tracking-[2px] text-gray-400 dark:text-gray-500 mb-0.5">
-          To Collect
-        </Text>
-        <Text className="text-lg font-black text-sky-500 leading-tight">
-          ₱{grandTotal.toFixed(2)}
-        </Text>
+  const collectListHeader = (
+    <View className="px-4 pt-2 pb-2">
+      <View className="flex-row gap-3">
+        <View className="flex-1 rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 px-4 py-3">
+          <Text className="text-[10px] font-black uppercase tracking-[2px] text-sky-500 mb-1">
+            To Collect
+          </Text>
+          <Text className="text-base font-black text-sky-600 dark:text-sky-400">
+            ₱{grandTotal.toFixed(2)}
+          </Text>
+        </View>
+        <View className="flex-1 rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 px-4 py-3">
+          <Text className="text-[10px] font-black uppercase tracking-[2px] text-gray-500 dark:text-gray-400 mb-1">
+            Active List
+          </Text>
+          <Text className="text-base font-black text-gray-900 dark:text-gray-100">
+            {activeCustomers.length}
+          </Text>
+        </View>
       </View>
-      <View className="w-[1px] h-8 bg-gray-100 dark:bg-gray-800 mx-6" />
-      <View className="flex-1 items-end">
-        <Text className="text-[10px] font-black uppercase tracking-[2px] text-gray-400 dark:text-gray-500 mb-0.5">
-          I Owe
-        </Text>
-        <Text className="text-lg font-black text-orange-500 leading-tight">
-          ₱{totalIOWe.toFixed(2)}
-        </Text>
+    </View>
+  );
+
+  const myTabListHeader = (
+    <View className="px-4 pt-2 pb-2">
+      <View className="flex-row gap-3">
+        <View className="flex-1 rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 px-4 py-3">
+          <Text className="text-[10px] font-black uppercase tracking-[2px] text-orange-500 mb-1">
+            I Owe
+          </Text>
+          <Text className="text-base font-black text-orange-500">
+            PHP {totalIOWe.toFixed(2)}
+          </Text>
+        </View>
+        <View className="flex-1 rounded-2xl bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 px-4 py-3">
+          <Text className="text-[10px] font-black uppercase tracking-[2px] text-gray-500 dark:text-gray-400 mb-1">
+            Active List
+          </Text>
+          <Text className="text-base font-black text-gray-900 dark:text-gray-100">
+            {activeCreditors.length}
+          </Text>
+        </View>
       </View>
     </View>
   );
@@ -468,7 +498,7 @@ export default function HomeScreen() {
   );
 
   return (
-    <ScreenContainer scrollable={false} header={summaryHeader}>
+    <ScreenContainer scrollable={false}>
       {/* Page Indicator */}
       <View className="py-4 bg-gray-50 dark:bg-gray-950">
         <View className="flex-row items-center">

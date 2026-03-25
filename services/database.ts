@@ -1,8 +1,10 @@
-import * as SQLite from 'expo-sqlite';
+import * as SQLite from "expo-sqlite";
 
 export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
-  const DATABASE_VERSION = 6;
-  let result = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  const DATABASE_VERSION = 8;
+  let result = await db.getFirstAsync<{ user_version: number }>(
+    "PRAGMA user_version",
+  );
   let currentDbVersion = result?.user_version ?? 0;
 
   if (currentDbVersion >= DATABASE_VERSION) {
@@ -26,17 +28,25 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
   }
 
   if (currentDbVersion < 2) {
-    const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(customers)');
+    const columns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(customers)",
+    );
     const columnNames = new Set(columns.map((col) => col.name));
 
-    if (!columnNames.has('interest_enabled')) {
-      await db.execAsync('ALTER TABLE customers ADD COLUMN interest_enabled INTEGER DEFAULT 0;');
+    if (!columnNames.has("interest_enabled")) {
+      await db.execAsync(
+        "ALTER TABLE customers ADD COLUMN interest_enabled INTEGER DEFAULT 0;",
+      );
     }
-    if (!columnNames.has('interest_rate')) {
-      await db.execAsync('ALTER TABLE customers ADD COLUMN interest_rate REAL DEFAULT 0;');
+    if (!columnNames.has("interest_rate")) {
+      await db.execAsync(
+        "ALTER TABLE customers ADD COLUMN interest_rate REAL DEFAULT 0;",
+      );
     }
-    if (!columnNames.has('interest_type')) {
-      await db.execAsync("ALTER TABLE customers ADD COLUMN interest_type TEXT DEFAULT 'Monthly';");
+    if (!columnNames.has("interest_type")) {
+      await db.execAsync(
+        "ALTER TABLE customers ADD COLUMN interest_type TEXT DEFAULT 'Monthly';",
+      );
     }
 
     currentDbVersion = 2;
@@ -60,14 +70,19 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
 
     // Migrate existing customer balances into lend entries
     const existing = await db.getAllAsync<{
-      id: number; balance: number; interest_enabled: number;
-      interest_rate: number; interest_type: string | null;
-    }>('SELECT id, balance, interest_enabled, interest_rate, interest_type FROM customers WHERE balance != 0');
+      id: number;
+      balance: number;
+      interest_enabled: number;
+      interest_rate: number;
+      interest_type: string | null;
+    }>(
+      "SELECT id, balance, interest_enabled, interest_rate, interest_type FROM customers WHERE balance != 0",
+    );
 
     for (const c of existing) {
       await db.runAsync(
-        'INSERT INTO lends (customer_id, amount, interest_enabled, interest_rate, interest_type) VALUES (?, ?, ?, ?, ?)',
-        [c.id, c.balance, c.interest_enabled, c.interest_rate, c.interest_type]
+        "INSERT INTO lends (customer_id, amount, interest_enabled, interest_rate, interest_type) VALUES (?, ?, ?, ?, ?)",
+        [c.id, c.balance, c.interest_enabled, c.interest_rate, c.interest_type],
       );
     }
 
@@ -75,11 +90,15 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
   }
 
   if (currentDbVersion < 4) {
-    const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(lends)');
+    const columns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(lends)",
+    );
     const columnNames = new Set(columns.map((col) => col.name));
 
-    if (!columnNames.has('description')) {
-      await db.execAsync('ALTER TABLE lends ADD COLUMN description TEXT DEFAULT NULL;');
+    if (!columnNames.has("description")) {
+      await db.execAsync(
+        "ALTER TABLE lends ADD COLUMN description TEXT DEFAULT NULL;",
+      );
     }
     currentDbVersion = 4;
   }
@@ -107,6 +126,49 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
       );
     `);
     currentDbVersion = 6;
+  }
+
+  if (currentDbVersion < 7) {
+    const columns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(creditors)",
+    );
+    const columnNames = new Set(columns.map((col) => col.name));
+
+    if (!columnNames.has("description")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN description TEXT DEFAULT NULL;",
+      );
+    }
+    if (!columnNames.has("interest_enabled")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN interest_enabled INTEGER DEFAULT 0;",
+      );
+    }
+    if (!columnNames.has("interest_rate")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN interest_rate REAL DEFAULT 0;",
+      );
+    }
+    if (!columnNames.has("interest_type")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN interest_type TEXT DEFAULT NULL;",
+      );
+    }
+
+    currentDbVersion = 7;
+  }
+
+  if (currentDbVersion < 8) {
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS creditor_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        creditor_id INTEGER NOT NULL,
+        amount REAL NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (creditor_id) REFERENCES creditors(id) ON DELETE CASCADE
+      );
+    `);
+    currentDbVersion = 8;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
