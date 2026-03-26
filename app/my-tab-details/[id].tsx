@@ -1,101 +1,88 @@
-import { useSQLiteContext } from "expo-sqlite";
-import { View, Text, Pressable, ScrollView } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
-import { useMemo, useState, useEffect } from "react";
+import { useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useMemo, useState } from "react";
+import { Pressable, Text, View } from "react-native";
 
 import ScreenContainer from "@/components/screen-container";
-import { useLends } from "@/hooks/use-lends";
-import { useCustomers } from "@/hooks/use-customers";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { useCreditors } from "@/hooks/use-creditors";
 import { getReferenceLabel } from "@/services/reference";
 
-export default function LendDetailsScreen() {
+export default function MyTabDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const db = useSQLiteContext();
-  const { lends, getPayments } = useLends();
-  const { customers } = useCustomers();
   const colorScheme = useColorScheme();
-
+  const { creditors, getPayments } = useCreditors();
   const [payments, setPayments] = useState<
-    { id: number; amount: number; created_at: string }[]
+    { id: number; amount: number; created_at: string; creditor_id: number }[]
   >([]);
 
-  const lendId = Number(id);
-  const lend = lends.find((l) => l.id === lendId);
-  const customer = customers.find((c) => c.id === lend?.customer_id);
+  const creditorId = Number(id);
+  const creditor = creditors.find((item) => item.id === creditorId);
 
   useEffect(() => {
     let isMounted = true;
-    if (lendId) {
-      getPayments(lendId).then((res) => {
-        if (isMounted) setPayments(res);
+
+    if (creditorId) {
+      getPayments(creditorId).then((result) => {
+        if (isMounted) {
+          setPayments(result);
+        }
       });
     }
+
     return () => {
       isMounted = false;
     };
-  }, [lendId, getPayments, lends]); // getPayments is now stable
+  }, [creditorId, getPayments]);
 
   const stats = useMemo(() => {
-    if (!lend) return null;
+    if (!creditor) return null;
 
-    const start = new Date(lend.created_at);
-    const now =
-      lend.status === "Completed" && lend.completed_at
-        ? new Date(lend.completed_at)
-        : new Date();
+    const start = new Date(creditor.created_at);
+    const now = new Date();
     const diff = now.getTime() - start.getTime();
     const dayMs = 1000 * 60 * 60 * 24;
-
     let intervals = 0;
-    let label = "";
+    let label = "No interest";
 
-    if (lend.interest_type === "Daily") {
+    if (creditor.interest_enabled && creditor.interest_type === "Daily") {
       intervals = Math.floor(diff / dayMs);
       label = `${intervals} Days`;
-    } else if (lend.interest_type === "Monthly") {
+    } else if (
+      creditor.interest_enabled &&
+      creditor.interest_type === "Monthly"
+    ) {
       intervals = Math.floor(diff / (dayMs * 30.4375));
       label = `${intervals} Months`;
-    } else if (lend.interest_type === "Yearly") {
+    } else if (
+      creditor.interest_enabled &&
+      creditor.interest_type === "Yearly"
+    ) {
       intervals = Math.floor(diff / (dayMs * 365.25));
       label = `${intervals} Years`;
     }
 
-    const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
-
-    // For completed lends, use history as the truth because amount is zeroed out
-    if (lend.status === "Completed") {
-      return {
-        intervals,
-        label,
-        interest: 0, // In completed state, interest is already part of totalPaid
-        total: totalPaid,
-        totalPaid,
-        daysElapsed: Math.floor(diff / dayMs),
-      };
-    }
-
-    const interest =
-      lend.amount * ((lend.interest_rate || 0) / 100) * intervals;
-    const total = lend.amount + interest;
+    const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
+    const accruedInterest = creditor.interest_enabled
+      ? creditor.balance * ((creditor.interest_rate || 0) / 100) * intervals
+      : 0;
+    const payoffTotal = creditor.balance + accruedInterest;
 
     return {
-      intervals,
-      label,
-      interest,
-      total,
-      totalPaid,
+      accruedInterest,
       daysElapsed: Math.floor(diff / dayMs),
+      label,
+      payoffTotal,
+      totalPaid,
     };
-  }, [lend, payments]);
+  }, [creditor, payments]);
 
-  if (!lend || !stats) {
+  if (!creditor || !stats) {
     return (
       <ScreenContainer>
         <View className="flex-1 items-center justify-center">
-          <Text className="text-gray-500">Loan not found.</Text>
+          <Text className="text-gray-500">Tab details not found.</Text>
         </View>
       </ScreenContainer>
     );
@@ -114,7 +101,7 @@ export default function LendDetailsScreen() {
         />
       </Pressable>
       <Text className="text-xl font-bold text-gray-900 dark:text-gray-100">
-        Interest Snapshot
+        My Tab Details
       </Text>
     </View>
   );
@@ -128,37 +115,28 @@ export default function LendDetailsScreen() {
     >
       <View className="bg-white dark:bg-gray-900 rounded-[32px] p-6 mx-6 shadow-2xl border border-gray-100 dark:border-gray-800 mt-4 mb-4">
         <View className="items-center mb-6">
-          <View
-            className={`w-16 h-16 rounded-full ${lend.status === "Completed" ? "bg-emerald-100 dark:bg-emerald-900/30" : "bg-sky-100 dark:bg-sky-900/30"} items-center justify-center mb-3`}
-          >
-            <Ionicons
-              name={lend.status === "Completed" ? "checkmark-done" : "pulse"}
-              size={32}
-              color={lend.status === "Completed" ? "#10b981" : "#0ea5e9"}
-            />
+          <View className="w-16 h-16 rounded-full bg-orange-100 dark:bg-orange-900/30 items-center justify-center mb-3">
+            <Ionicons name="wallet-outline" size={32} color="#f97316" />
           </View>
-          <Text
-            className={`text-[10px] ${lend.status === "Completed" ? "text-emerald-500" : "text-sky-500"} font-black uppercase tracking-[4px] mb-1`}
-          >
-            {lend.status === "Completed"
-              ? "Final Snapshot"
-              : "Accumulating Now"}
+          <Text className="text-[10px] text-orange-500 font-black uppercase tracking-[4px] mb-1">
+            Outstanding Snapshot
           </Text>
           <Text className="text-lg font-bold text-gray-900 dark:text-gray-100">
-            {customer?.name}
+            {creditor.name}
           </Text>
           <Text className="text-[10px] text-gray-400 dark:text-gray-500 font-mono mt-1 opacity-60">
-            REF: {getReferenceLabel("lend", lend.id, lend.reference_code)}
+            REF:{" "}
+            {getReferenceLabel("tab", creditor.id, creditor.reference_code)}
           </Text>
         </View>
 
         <View className="border-t border-b border-dashed border-gray-200 dark:border-gray-800 py-4 my-1 gap-4">
           <View className="flex-row justify-between">
             <Text className="text-gray-400 dark:text-gray-500 font-medium">
-              Remaining Principal
+              Remaining Amount
             </Text>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">
-              ₱{lend.amount.toFixed(2)}
+              â‚±{creditor.balance.toFixed(2)}
             </Text>
           </View>
 
@@ -168,11 +146,13 @@ export default function LendDetailsScreen() {
                 Agreement
               </Text>
               <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
-                {lend.interest_type}
+                {creditor.interest_enabled
+                  ? creditor.interest_type
+                  : "No interest"}
               </Text>
             </View>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">
-              {lend.interest_rate}%
+              {creditor.interest_enabled ? `${creditor.interest_rate}%` : "0%"}
             </Text>
           </View>
 
@@ -192,22 +172,21 @@ export default function LendDetailsScreen() {
 
           <View className="flex-row justify-between">
             <Text className="text-gray-400 dark:text-gray-500 font-medium font-black">
-              Accrued Interest
+              Accumulated Interest
             </Text>
-            <Text className="text-emerald-500 font-black text-xl">
-              + ₱{stats.interest.toFixed(2)}
+            <Text className="text-orange-500 font-black text-xl">
+              + â‚±{stats.accruedInterest.toFixed(2)}
             </Text>
           </View>
         </View>
 
         <View className="mt-6 items-center">
           <Text className="text-gray-400 dark:text-gray-500 uppercase text-[9px] font-black tracking-[4px] mb-2 text-center leading-4">
-            {lend.status === "Completed"
-              ? "Total Amount\nSettled"
-              : "Current Balance\n(if settled now)"}
+            Current Balance
+            {"\n"}(if settled now)
           </Text>
           <Text className="text-4xl font-black text-gray-900 dark:text-gray-100">
-            ₱{stats.total.toFixed(2)}
+            â‚±{stats.payoffTotal.toFixed(2)}
           </Text>
         </View>
 
@@ -217,40 +196,39 @@ export default function LendDetailsScreen() {
               Total Paid (History)
             </Text>
             <Text className="text-sky-500 font-bold text-xs">
-              ₱{stats.totalPaid.toFixed(2)}
+              â‚±{stats.totalPaid.toFixed(2)}
             </Text>
           </View>
         </View>
 
-        {lend.description ? (
+        {creditor.description ? (
           <View className="mt-4 bg-gray-50 dark:bg-gray-800/50 p-3 rounded-2xl border border-gray-100 dark:border-gray-800">
             <Text className="text-[9px] text-gray-400 dark:text-gray-500 uppercase font-black tracking-widest mb-1 ml-1">
               Description
             </Text>
             <Text className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed italic">
-              "{lend.description}"
+              "{creditor.description}"
             </Text>
           </View>
         ) : null}
 
         <View className="mt-4">
           <Text className="text-[9px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">
-            Started {new Date(lend.created_at).toLocaleDateString()}
+            Started {new Date(creditor.created_at).toLocaleDateString()}
           </Text>
         </View>
       </View>
 
-      {/* Payment History Section */}
       {payments.length > 0 && (
         <View className="mx-6 mb-10">
           <Text className="text-[10px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-[4px] mb-4 ml-2">
             Payment History
           </Text>
           <View className="bg-white dark:bg-gray-900 rounded-[32px] overflow-hidden border border-gray-100 dark:border-gray-800">
-            {payments.map((p, i) => (
+            {payments.map((payment, index) => (
               <View
-                key={p.id}
-                className={`flex-row items-center justify-between p-4 ${i !== payments.length - 1 ? "border-b border-gray-50 dark:border-gray-800/50" : ""}`}
+                key={payment.id}
+                className={`flex-row items-center justify-between p-4 ${index !== payments.length - 1 ? "border-b border-gray-50 dark:border-gray-800/50" : ""}`}
               >
                 <View className="flex-row items-center">
                   <View className="w-8 h-8 rounded-full bg-emerald-100 dark:bg-emerald-900/30 items-center justify-center mr-3">
@@ -258,16 +236,16 @@ export default function LendDetailsScreen() {
                   </View>
                   <View>
                     <Text className="text-gray-900 dark:text-gray-100 font-bold text-sm">
-                      ₱{p.amount.toFixed(2)}
+                      â‚±{payment.amount.toFixed(2)}
                     </Text>
                     <Text className="text-[10px] text-gray-400 dark:text-gray-500">
-                      {new Date(p.created_at).toLocaleDateString()}
+                      {new Date(payment.created_at).toLocaleDateString()}
                     </Text>
                   </View>
                 </View>
-                <View className="bg-sky-50 dark:bg-sky-900/20 px-2 py-1 rounded-full">
-                  <Text className="text-[8px] font-black text-sky-500 uppercase tracking-widest">
-                    Partial
+                <View className="bg-orange-50 dark:bg-orange-900/20 px-2 py-1 rounded-full">
+                  <Text className="text-[8px] font-black text-orange-500 uppercase tracking-widest">
+                    Paid
                   </Text>
                 </View>
               </View>

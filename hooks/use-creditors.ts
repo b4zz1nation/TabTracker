@@ -1,8 +1,10 @@
 import { useSQLiteContext } from "expo-sqlite";
 import { useState, useCallback, useEffect, useMemo } from "react";
+import { createUniqueReferenceForKind } from "@/services/reference";
 
 export interface Creditor {
   id: number;
+  reference_code?: string | null;
   name: string;
   balance: number;
   description?: string | null;
@@ -54,9 +56,11 @@ export function useCreditors() {
         );
         if (existing) throw new Error("DUPLICATE_NAME");
 
+        const referenceCode = await createUniqueReferenceForKind(db, "tab");
         await db.runAsync(
-          "INSERT INTO creditors (name, balance, description, interest_enabled, interest_rate, interest_type) VALUES (?, ?, ?, ?, ?, ?)",
+          "INSERT INTO creditors (reference_code, name, balance, description, interest_enabled, interest_rate, interest_type) VALUES (?, ?, ?, ?, ?, ?, ?)",
           [
+            referenceCode,
             name.trim(),
             initialBalance,
             description,

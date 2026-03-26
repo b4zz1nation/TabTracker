@@ -19,6 +19,7 @@ import {
 
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCreditors } from "@/hooks/use-creditors";
+import { getReferenceLabel } from "@/services/reference";
 
 export default function CreditorDetailScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -223,6 +224,13 @@ export default function CreditorDetailScreen() {
     closeSheet(() => openPaymentModal());
   }, [closeSheet, openPaymentModal]);
 
+  const handleViewDetails = useCallback(() => {
+    if (!creditor) return;
+    closeSheet(() => {
+      router.push(`/my-tab-details/${creditor.id}`);
+    });
+  }, [closeSheet, creditor, router]);
+
   const handleComplete = useCallback(async () => {
     if (!creditor) return;
     await completeCreditor(creditor.id);
@@ -377,7 +385,8 @@ export default function CreditorDetailScreen() {
                 </Pressable>
               )}
               <Text className="text-[10px] text-gray-400 font-mono opacity-60">
-                REF: #{creditor.id.toString().padStart(6, "0")}
+                REF:{" "}
+                {getReferenceLabel("tab", creditor.id, creditor.reference_code)}
               </Text>
             </View>
           </Pressable>
@@ -450,6 +459,19 @@ export default function CreditorDetailScreen() {
                 <Ionicons name="create-outline" size={20} color="#0ea5e9" />
                 <Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">
                   Edit
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleViewDetails}
+                className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800"
+              >
+                <Ionicons
+                  name="document-text-outline"
+                  size={20}
+                  color="#0ea5e9"
+                />
+                <Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">
+                  View Details
                 </Text>
               </Pressable>
               <Pressable

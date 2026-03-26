@@ -21,6 +21,7 @@ import { useCustomers } from "@/hooks/use-customers";
 import { useLends } from "@/hooks/use-lends";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import ScreenContainer from "@/components/screen-container";
+import { getReferenceLabel } from "@/services/reference";
 
 export default function AddCustomerScreen() {
   const router = useRouter();
@@ -450,7 +451,12 @@ export default function AddCustomerScreen() {
                 Payment Settled
               </Text>
               <Text className="text-gray-400 dark:text-gray-500 text-[10px] font-mono mt-1 opacity-60">
-                REF: #{lendId?.padStart(6, "0")}
+                REF:{" "}
+                {getReferenceLabel(
+                  "lend",
+                  Number(lendId),
+                  lends.find((l) => l.id === Number(lendId))?.reference_code,
+                )}
               </Text>
             </View>
 

@@ -24,6 +24,7 @@ import {
 import ScreenContainer from "@/components/screen-container";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCreditors } from "@/hooks/use-creditors";
+import { getReferenceLabel } from "@/services/reference";
 
 const SPRING_CONFIG = {
   damping: 28,
@@ -393,7 +394,12 @@ export default function MyTabModalScreen() {
                 Payment Settled
               </Text>
               <Text className="text-gray-400 dark:text-gray-500 text-[10px] font-mono mt-1 opacity-60">
-                REF: #{existingCreditor.id.toString().padStart(6, "0")}
+                REF:{" "}
+                {getReferenceLabel(
+                  "tab",
+                  existingCreditor.id,
+                  existingCreditor.reference_code,
+                )}
               </Text>
             </View>
 

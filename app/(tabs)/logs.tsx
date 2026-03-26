@@ -7,6 +7,7 @@ import ScreenContainer from "@/components/screen-container";
 import { useLends } from "@/hooks/use-lends";
 import { useCustomers } from "@/hooks/use-customers";
 import { useCreditors } from "@/hooks/use-creditors";
+import { getReferenceLabel } from "@/services/reference";
 
 type Activity = {
   id: string;
@@ -21,6 +22,7 @@ type LogGroup = {
   kind: "lend" | "creditor";
   title: string;
   refId: number;
+  referenceCode?: string | null;
   status: "Ongoing" | "Completed";
   latestDate: string;
   initialPrincipal: number;
@@ -168,7 +170,12 @@ const LogCard = React.memo(({ group }: { group: LogGroup }) => {
                   {group.title}
                 </Text>
                 <Text className="text-[10px] text-gray-400 dark:text-gray-500 font-black uppercase tracking-widest">
-                  REF: #{group.refId.toString().padStart(6, "0")}
+                  REF:{" "}
+                  {getReferenceLabel(
+                    group.kind === "lend" ? "lend" : "tab",
+                    group.refId,
+                    group.referenceCode,
+                  )}
                 </Text>
               </View>
             </View>
@@ -316,6 +323,7 @@ export default function LogsScreen() {
         kind: "lend",
         title: customer?.name || "Unknown",
         refId: lend.id,
+        referenceCode: lend.reference_code,
         status: lend.status,
         latestDate,
         totalPaid: totalPayments,
@@ -378,6 +386,7 @@ export default function LogsScreen() {
         kind: "creditor",
         title: creditor.name,
         refId: creditor.id,
+        referenceCode: creditor.reference_code,
         status,
         latestDate,
         totalPaid: totalPayments,

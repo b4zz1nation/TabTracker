@@ -1,7 +1,8 @@
 import * as SQLite from "expo-sqlite";
+import { createUniqueReferenceForKind, isUuidV7 } from "@/services/reference";
 
 export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
-  const DATABASE_VERSION = 8;
+  const DATABASE_VERSION = 10;
   let result = await db.getFirstAsync<{ user_version: number }>(
     "PRAGMA user_version",
   );
@@ -169,6 +170,99 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
       );
     `);
     currentDbVersion = 8;
+  }
+
+  if (currentDbVersion < 9) {
+    const lendColumns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(lends)",
+    );
+    const lendColumnNames = new Set(lendColumns.map((col) => col.name));
+
+    if (!lendColumnNames.has("reference_code")) {
+      await db.execAsync(
+        "ALTER TABLE lends ADD COLUMN reference_code TEXT DEFAULT NULL;",
+      );
+    }
+
+    const creditorColumns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(creditors)",
+    );
+    const creditorColumnNames = new Set(creditorColumns.map((col) => col.name));
+
+    if (!creditorColumnNames.has("reference_code")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN reference_code TEXT DEFAULT NULL;",
+      );
+    }
+
+    const lendsWithoutReference = await db.getAllAsync<{ id: number }>(
+      "SELECT id FROM lends WHERE reference_code IS NULL OR TRIM(reference_code) = ''",
+    );
+
+    for (const lend of lendsWithoutReference) {
+      const referenceCode = await createUniqueReferenceForKind(db, "lend");
+      await db.runAsync("UPDATE lends SET reference_code = ? WHERE id = ?", [
+        referenceCode,
+        lend.id,
+      ]);
+    }
+
+    const creditorsWithoutReference = await db.getAllAsync<{ id: number }>(
+      "SELECT id FROM creditors WHERE reference_code IS NULL OR TRIM(reference_code) = ''",
+    );
+
+    for (const creditor of creditorsWithoutReference) {
+      const referenceCode = await createUniqueReferenceForKind(db, "tab");
+      await db.runAsync(
+        "UPDATE creditors SET reference_code = ? WHERE id = ?",
+        [referenceCode, creditor.id],
+      );
+    }
+
+    await db.execAsync(`
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_lends_reference_code ON lends(reference_code);
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_creditors_reference_code ON creditors(reference_code);
+    `);
+
+    currentDbVersion = 9;
+  }
+
+  if (currentDbVersion < 10) {
+    const lendsWithLegacyReference = await db.getAllAsync<{
+      id: number;
+      reference_code: string | null;
+    }>("SELECT id, reference_code FROM lends");
+
+    for (const lend of lendsWithLegacyReference) {
+      if (isUuidV7(lend.reference_code)) {
+        continue;
+      }
+
+      const referenceCode = await createUniqueReferenceForKind(db, "lend");
+      await db.runAsync("UPDATE lends SET reference_code = ? WHERE id = ?", [
+        referenceCode,
+        lend.id,
+      ]);
+    }
+
+    const creditorsWithLegacyReference = await db.getAllAsync<{
+      id: number;
+      reference_code: string | null;
+    }>("SELECT id, reference_code FROM creditors");
+
+    for (const creditor of creditorsWithLegacyReference) {
+      if (isUuidV7(creditor.reference_code)) {
+        continue;
+      }
+
+      const referenceCode = await createUniqueReferenceForKind(db, "tab");
+      await db.runAsync(
+        "UPDATE creditors SET reference_code = ? WHERE id = ?",
+        [referenceCode, creditor.id],
+      );
+    }
+
+    currentDbVersion = 10;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);
