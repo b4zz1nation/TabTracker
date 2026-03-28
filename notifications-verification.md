@@ -32,3 +32,18 @@ Use a device build for these checks.
 - [ ] Mark notifications read by opening the Notifications tab
 - [ ] Create an entry with reminders disabled and confirm no due reminders are created
 - [ ] Reopen the app repeatedly and confirm reminder dedupe prevents duplicates
+
+## Dev-Only Runtime Helpers
+
+The Notifications tab includes a dev-only verification panel in `__DEV__`.
+
+Buttons:
+
+- `Seed unread reminder`
+  - inserts an unread reminder-style notification into SQLite
+  - use this to verify the unread badge and notification list rendering
+
+- `Seed payment notif`
+  - inserts a payment notification record
+  - attempts a local notification if permission is granted
+  - use this to verify payment-notification runtime behavior

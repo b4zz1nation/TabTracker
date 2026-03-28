@@ -7,12 +7,17 @@ import { Pressable, Text, View } from "react-native";
 
 import ScreenContainer from "@/components/screen-container";
 import { useNotifications } from "@/contexts/notifications-context";
+import { formatNotificationCopy } from "@/services/notification-copy";
 import { getNotificationRoutePayload } from "@/services/notification-routing";
 import {
   getNotificationHistory,
+  getNotificationPayloadData,
+  insertNotificationRecord,
   markAllNotificationsRead,
   markNotificationRead,
   NotificationRecord,
+  requestNotificationPermission,
+  scheduleLocalNotification,
 } from "@/services/notifications";
 
 function formatNotificationTimestamp(record: NotificationRecord) {
@@ -38,12 +43,16 @@ export default function NotificationsScreen() {
   const { refreshUnreadCount } = useNotifications();
   const [notifications, setNotifications] = useState<NotificationRecord[]>([]);
 
-  const refreshNotifications = useCallback(async () => {
+  const loadNotifications = useCallback(async () => {
     const history = await getNotificationHistory(db, 100);
     setNotifications(history);
+  }, [db]);
+
+  const refreshNotifications = useCallback(async () => {
+    await loadNotifications();
     await markAllNotificationsRead(db);
     await refreshUnreadCount();
-  }, [db, refreshUnreadCount]);
+  }, [db, loadNotifications, refreshUnreadCount]);
 
   useFocusEffect(
     useCallback(() => {
@@ -75,8 +84,89 @@ export default function NotificationsScreen() {
     [db, refreshUnreadCount, router],
   );
 
+  const handleSeedUnreadReminder = useCallback(async () => {
+    const now = new Date().toISOString();
+    await insertNotificationRecord(db, {
+      entityType: "lend",
+      entityId: 1,
+      referenceCode: "DEBUGREMIND01",
+      kind: "due_1d",
+      title: "Due tomorrow",
+      body: "Reminder: Debug Customer owes you PHP 500.00 due tomorrow.",
+      dedupeKey: `debug:unread:${now}`,
+    });
+    await loadNotifications();
+    await refreshUnreadCount();
+  }, [db, loadNotifications, refreshUnreadCount]);
+
+  const handleSeedPaymentNotification = useCallback(async () => {
+    const now = new Date().toISOString();
+    const copy = formatNotificationCopy({
+      entityType: "lend",
+      entityId: 1,
+      referenceCode: "DEBUGPAY0001",
+      kind: "payment_received",
+      counterpartyName: "Debug Customer",
+      amount: 300,
+    });
+
+    await insertNotificationRecord(db, {
+      entityType: "lend",
+      entityId: 1,
+      referenceCode: "DEBUGPAY0001",
+      kind: "payment_received",
+      title: copy.title,
+      body: copy.body,
+      sentAt: now,
+      dedupeKey: `debug:payment:${now}`,
+    });
+
+    const permission = await requestNotificationPermission();
+    if (permission.granted) {
+      await scheduleLocalNotification(
+        copy.title,
+        copy.body,
+        getNotificationPayloadData("lend", 1, "DEBUGPAY0001"),
+      );
+    }
+
+    await loadNotifications();
+    await refreshUnreadCount();
+  }, [db, loadNotifications, refreshUnreadCount]);
+
   return (
     <ScreenContainer header={header} scrollable={true} centerContent={false}>
+      {__DEV__ && (
+        <View className="px-5 pb-5 gap-3">
+          <View className="rounded-[24px] border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-800 p-4">
+            <Text className="text-sm font-bold text-amber-700 dark:text-amber-300 mb-3">
+              Notification verification
+            </Text>
+            <View className="flex-row gap-3">
+              <Pressable
+                onPress={handleSeedUnreadReminder}
+                className="flex-1 rounded-2xl bg-sky-500 px-4 py-3"
+              >
+                <Text className="text-white font-semibold text-center">
+                  Seed unread reminder
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={handleSeedPaymentNotification}
+                className="flex-1 rounded-2xl bg-emerald-500 px-4 py-3"
+              >
+                <Text className="text-white font-semibold text-center">
+                  Seed payment notif
+                </Text>
+              </Pressable>
+            </View>
+            <Text className="text-[11px] text-amber-700 dark:text-amber-300 mt-3">
+              Use these buttons on a dev build to verify unread badge and
+              payment notification behavior.
+            </Text>
+          </View>
+        </View>
+      )}
       {notifications.length === 0 ? (
         <View className="flex-1 items-center justify-center p-10">
           <Ionicons name="notifications-outline" size={64} color="#d1d5db" />
