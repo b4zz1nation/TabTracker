@@ -28,6 +28,7 @@ import {
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCustomers } from "@/hooks/use-customers";
 import { Lend, useLends } from "@/hooks/use-lends";
+import { calculatePayoff } from "@/services/payoff";
 import { getReferenceLabel } from "@/services/reference";
 
 export default function CustomerDetailScreen() {
@@ -60,8 +61,12 @@ export default function CustomerDetailScreen() {
 
   // Sheet Animations
   const [sheetMounted, setSheetMounted] = useState(false);
+  const [sheetBlockingTouches, setSheetBlockingTouches] = useState(false);
+  const [isCompletingConfirm, setIsCompletingConfirm] = useState(false);
   const sheetAnim = useRef(new Animated.Value(600)).current;
   const sheetBackdropAnim = useRef(new Animated.Value(0)).current;
+  const completeStepAnim = useRef(new Animated.Value(0)).current;
+  const sheetTransitionId = useRef(0);
 
   // Delete Animations
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -141,6 +146,15 @@ export default function CustomerDetailScreen() {
     };
   }, [paymentModalVisible]);
 
+  useEffect(() => {
+    Animated.spring(completeStepAnim, {
+      toValue: isCompletingConfirm ? 1 : 0,
+      damping: 28,
+      stiffness: 300,
+      useNativeDriver: true,
+    }).start();
+  }, [completeStepAnim, isCompletingConfirm]);
+
   const closePaymentModal = (cb?: () => void) => {
     Keyboard.dismiss();
     Animated.parallel([
@@ -164,7 +178,10 @@ export default function CustomerDetailScreen() {
   };
 
   const openSheet = (lend: Lend) => {
+    sheetTransitionId.current += 1;
     setSelectedLend(lend);
+    setSheetBlockingTouches(true);
+    setIsCompletingConfirm(false);
     setSheetMounted(true);
     sheetAnim.setValue(600);
     sheetBackdropAnim.setValue(0);
@@ -184,6 +201,8 @@ export default function CustomerDetailScreen() {
   };
 
   const closeSheet = (cb?: () => void) => {
+    const transitionId = ++sheetTransitionId.current;
+    setSheetBlockingTouches(false);
     Animated.parallel([
       Animated.spring(sheetAnim, {
         toValue: 600,
@@ -197,7 +216,12 @@ export default function CustomerDetailScreen() {
         useNativeDriver: true,
       }),
     ]).start(() => {
+      if (sheetTransitionId.current !== transitionId) {
+        return;
+      }
       setSheetMounted(false);
+      setIsCompletingConfirm(false);
+      completeStepAnim.setValue(0);
       cb?.();
     });
   };
@@ -301,33 +325,23 @@ export default function CustomerDetailScreen() {
   const handleAddPayment = () => {
     if (!selectedLend) return;
     const l = selectedLend;
-    // Calc balance simple
-    const start = new Date(l.created_at);
-    const now = new Date();
-    const dayMs = 1000 * 60 * 60 * 24;
-    let intervals = 0;
-    if (l.interest_type === "Daily")
-      intervals = Math.floor((now.getTime() - start.getTime()) / dayMs);
-    else if (l.interest_type === "Monthly")
-      intervals = Math.floor(
-        (now.getTime() - start.getTime()) / (dayMs * 30.4375),
-      );
-    else if (l.interest_type === "Yearly")
-      intervals = Math.floor(
-        (now.getTime() - start.getTime()) / (dayMs * 365.25),
-      );
-    const total =
-      l.amount + l.amount * ((l.interest_rate || 0) / 100) * intervals;
-    setPaymentCurrentBalance(total.toFixed(2));
+    const payoff = calculatePayoff({
+      principal: l.amount,
+      createdAt: l.created_at,
+      interestEnabled: l.interest_enabled === 1,
+      interestRate: l.interest_rate || 0,
+      interestType: l.interest_type,
+      completedAt: l.completed_at,
+    });
+    setPaymentCurrentBalance(payoff.payoffTotal.toFixed(2));
     setPaymentModalVisible(true);
     closeSheet();
   };
 
   const handleViewLendDetails = () => {
     if (!selectedLend) return;
-    closeSheet(() => {
-      router.push(`/lend-details/${selectedLend.id}`);
-    });
+    setSheetMounted(false);
+    router.push(`/lend-details/${selectedLend.id}`);
   };
 
   const handlePaymentAmountChange = (text: string) => {
@@ -351,6 +365,22 @@ export default function CustomerDetailScreen() {
   };
 
   const handleCompleteLend = async () => {
+    if (!selectedLend) return;
+    setIsCompletingConfirm(true);
+  };
+
+  const handleSheetBackdropPress = useCallback(() => {
+    if (isCompletingConfirm) {
+      completeStepAnim.stopAnimation();
+      completeStepAnim.setValue(0);
+      setIsCompletingConfirm(false);
+      return;
+    }
+
+    closeSheet();
+  }, [closeSheet, completeStepAnim, isCompletingConfirm]);
+
+  const handleConfirmCompleteLend = async () => {
     if (!selectedLend) return;
     const l = selectedLend;
     const start = new Date(l.created_at);
@@ -507,7 +537,7 @@ export default function CustomerDetailScreen() {
                       </Text>
                     </View>
                     <Text className="text-[10px] text-gray-400">
-                      {new Date(p.created_at).toLocaleDateString()}
+                      {new Date(p.created_at).toLocaleString()}
                     </Text>
                   </View>
                 ))}
@@ -585,30 +615,16 @@ export default function CustomerDetailScreen() {
         renderItem={renderLend}
         contentContainerStyle={{ paddingVertical: 16, paddingBottom: 120 }}
       />
-      {!sheetMounted && !deleteModalMounted && !paymentModalVisible && (
-        <Pressable
-          onPress={() =>
-            router.push({
-              pathname: "/add-lend",
-              params: {
-                customer_id: customerId,
-                customer_name: customer?.name || "",
-              },
-            })
-          }
-          className="absolute right-8 w-16 h-16 rounded-full bg-sky-500 items-center justify-center shadow-lg"
-          style={{ bottom: insets.bottom + 40 }}
-        >
-          <Ionicons name="add" size={32} color="white" />
-        </Pressable>
-      )}
       {sheetMounted && (
-        <View className="absolute inset-0 z-[2000] justify-end">
+        <View
+          pointerEvents={sheetBlockingTouches ? "auto" : "none"}
+          className="absolute inset-0 z-[2000] justify-end"
+        >
           <Animated.View
             style={{ opacity: sheetBackdropAnim }}
             className="absolute inset-0 bg-black/50"
           >
-            <Pressable className="flex-1" onPress={() => closeSheet()} />
+            <Pressable className="flex-1" onPress={handleSheetBackdropPress} />
           </Animated.View>
           <Animated.View
             style={{
@@ -618,51 +634,107 @@ export default function CustomerDetailScreen() {
             className="w-full bg-white dark:bg-gray-900 rounded-t-3xl p-6"
           >
             <View className="w-10 h-1 bg-gray-300 dark:bg-gray-600 rounded-full mx-auto mb-6" />
-            <View className="gap-3">
-              <Pressable
-                onPress={handleEditLend}
-                className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800"
+            <View className="relative min-h-[280px] overflow-hidden">
+              <Animated.View
+                pointerEvents={isCompletingConfirm ? "none" : "auto"}
+                style={{
+                  opacity: completeStepAnim.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [1, 0],
+                  }),
+                  transform: [
+                    {
+                      translateX: completeStepAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [0, -24],
+                      }),
+                    },
+                  ],
+                }}
+                className="absolute inset-0"
               >
-                <Ionicons name="create-outline" size={20} color="#0ea5e9" />
-                <Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">
-                  Edit
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={handleViewLendDetails}
-                className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800"
+                <View className="gap-3">
+                  <Pressable
+                    onPress={handleEditLend}
+                    className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800"
+                  >
+                    <Ionicons name="create-outline" size={20} color="#0ea5e9" />
+                    <Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">
+                      Edit
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleViewLendDetails}
+                    className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800"
+                  >
+                    <Ionicons
+                      name="document-text-outline"
+                      size={20}
+                      color="#0ea5e9"
+                    />
+                    <Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">
+                      View Details
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleAddPayment}
+                    className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800"
+                  >
+                    <Ionicons name="cash-outline" size={20} color="#0ea5e9" />
+                    <Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">
+                      Add Payment
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={handleCompleteLend}
+                    className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800"
+                  >
+                    <Ionicons
+                      name="checkmark-circle-outline"
+                      size={20}
+                      color="#10b981"
+                    />
+                    <Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">
+                      Mark Complete
+                    </Text>
+                  </Pressable>
+                </View>
+              </Animated.View>
+              <Animated.View
+                pointerEvents={isCompletingConfirm ? "auto" : "none"}
+                style={{
+                  opacity: completeStepAnim,
+                  transform: [
+                    {
+                      translateX: completeStepAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: [24, 0],
+                      }),
+                    },
+                  ],
+                }}
+                className="absolute inset-0"
               >
-                <Ionicons
-                  name="document-text-outline"
-                  size={20}
-                  color="#0ea5e9"
-                />
-                <Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">
-                  View Details
+                <Text className="text-2xl font-black text-gray-900 dark:text-gray-100 mb-2">
+                  Mark lend complete?
                 </Text>
-              </Pressable>
-              <Pressable
-                onPress={handleAddPayment}
-                className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800"
-              >
-                <Ionicons name="cash-outline" size={20} color="#0ea5e9" />
-                <Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">
-                  Add Payment
+                <Text className="text-gray-500 dark:text-gray-400 mb-8">
+                  This will close the lend and record the remaining amount as
+                  fully paid.
                 </Text>
-              </Pressable>
-              <Pressable
-                onPress={handleCompleteLend}
-                className="flex-row items-center p-4 rounded-2xl bg-gray-100 dark:bg-gray-800"
-              >
-                <Ionicons
-                  name="checkmark-circle-outline"
-                  size={20}
-                  color="#10b981"
-                />
-                <Text className="ml-4 flex-1 font-semibold text-gray-900 dark:text-gray-100">
-                  Mark Complete
-                </Text>
-              </Pressable>
+                <Pressable
+                  onPress={handleConfirmCompleteLend}
+                  className="w-full bg-emerald-500 p-5 rounded-2xl items-center mb-3"
+                >
+                  <Text className="text-white font-bold">Confirm</Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setIsCompletingConfirm(false)}
+                  className="w-full p-4 items-center"
+                >
+                  <Text className="text-gray-400">Back</Text>
+                </Pressable>
+              </Animated.View>
             </View>
           </Animated.View>
         </View>

@@ -12,6 +12,7 @@ export interface Creditor {
   interest_rate: number;
   interest_type: "Daily" | "Monthly" | "Yearly" | null;
   created_at: string;
+  completed_at?: string | null;
 }
 
 export interface CreditorPayment {
@@ -48,17 +49,22 @@ export function useCreditors() {
       interestEnabled: boolean = false,
       interestRate: number = 0,
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
+      options?: {
+        allowDuplicateName?: boolean;
+      },
     ) => {
       try {
-        const existing = await db.getFirstAsync<{ id: number }>(
-          "SELECT id FROM creditors WHERE LOWER(name) = LOWER(?)",
-          [name.trim()],
-        );
-        if (existing) throw new Error("DUPLICATE_NAME");
+        if (!options?.allowDuplicateName) {
+          const existing = await db.getFirstAsync<{ id: number }>(
+            "SELECT id FROM creditors WHERE LOWER(name) = LOWER(?)",
+            [name.trim()],
+          );
+          if (existing) throw new Error("DUPLICATE_NAME");
+        }
 
         const referenceCode = await createUniqueReferenceForKind(db, "tab");
         await db.runAsync(
-          "INSERT INTO creditors (reference_code, name, balance, description, interest_enabled, interest_rate, interest_type) VALUES (?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO creditors (reference_code, name, balance, description, interest_enabled, interest_rate, interest_type, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
           [
             referenceCode,
             name.trim(),
@@ -67,6 +73,7 @@ export function useCreditors() {
             interestEnabled ? 1 : 0,
             interestRate,
             interestType,
+            null,
           ],
         );
         await fetchCreditors();
@@ -98,7 +105,7 @@ export function useCreditors() {
         if (existing) throw new Error("DUPLICATE_NAME");
 
         await db.runAsync(
-          "UPDATE creditors SET name = ?, balance = ?, description = ?, interest_enabled = ?, interest_rate = ?, interest_type = ? WHERE id = ?",
+          "UPDATE creditors SET name = ?, balance = ?, description = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, completed_at = CASE WHEN ? <= 0 THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = ?",
           [
             name.trim(),
             balance,
@@ -106,6 +113,7 @@ export function useCreditors() {
             interestEnabled ? 1 : 0,
             interestRate,
             interestType,
+            balance,
             id,
           ],
         );
@@ -151,10 +159,7 @@ export function useCreditors() {
 
   const addPayment = useCallback(
     async (creditorId: number, paymentAmount: number) => {
-      const creditor = await db.getFirstAsync<Creditor>(
-        "SELECT * FROM creditors WHERE id = ?",
-        [creditorId],
-      );
+      const creditor = creditors.find((item) => item.id === creditorId);
       if (!creditor) return;
 
       const now = new Date().toISOString();
@@ -164,13 +169,22 @@ export function useCreditors() {
         "INSERT INTO creditor_payments (creditor_id, amount, created_at) VALUES (?, ?, ?)",
         [creditorId, paymentAmount, now],
       );
-      await db.runAsync("UPDATE creditors SET balance = ? WHERE id = ?", [
-        nextBalance,
-        creditorId,
-      ]);
+
+      if (nextBalance <= 0) {
+        await db.runAsync(
+          "UPDATE creditors SET balance = 0, completed_at = ? WHERE id = ?",
+          [now, creditorId],
+        );
+      } else {
+        await db.runAsync(
+          "UPDATE creditors SET balance = ?, completed_at = NULL WHERE id = ?",
+          [nextBalance, creditorId],
+        );
+      }
+
       await fetchCreditors();
     },
-    [db, fetchCreditors],
+    [creditors, db, fetchCreditors],
   );
 
   const completeCreditor = useCallback(
@@ -188,9 +202,10 @@ export function useCreditors() {
           [creditorId, remaining, new Date().toISOString()],
         );
       }
-      await db.runAsync("UPDATE creditors SET balance = 0 WHERE id = ?", [
-        creditorId,
-      ]);
+      await db.runAsync(
+        "UPDATE creditors SET balance = 0, completed_at = ? WHERE id = ?",
+        [new Date().toISOString(), creditorId],
+      );
       await fetchCreditors();
     },
     [db, fetchCreditors],

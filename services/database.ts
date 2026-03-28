@@ -1,8 +1,11 @@
 import * as SQLite from "expo-sqlite";
-import { createUniqueReferenceForKind, isUuidV7 } from "@/services/reference";
+import {
+  createUniqueReferenceForKind,
+  isReferenceCode,
+} from "@/services/reference";
 
 export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
-  const DATABASE_VERSION = 10;
+  const DATABASE_VERSION = 12;
   let result = await db.getFirstAsync<{ user_version: number }>(
     "PRAGMA user_version",
   );
@@ -234,7 +237,7 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
     }>("SELECT id, reference_code FROM lends");
 
     for (const lend of lendsWithLegacyReference) {
-      if (isUuidV7(lend.reference_code)) {
+      if (isReferenceCode(lend.reference_code)) {
         continue;
       }
 
@@ -251,7 +254,7 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
     }>("SELECT id, reference_code FROM creditors");
 
     for (const creditor of creditorsWithLegacyReference) {
-      if (isUuidV7(creditor.reference_code)) {
+      if (isReferenceCode(creditor.reference_code)) {
         continue;
       }
 
@@ -263,6 +266,82 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
     }
 
     currentDbVersion = 10;
+  }
+
+  if (currentDbVersion < 11) {
+    const lendsToRewrite = await db.getAllAsync<{
+      id: number;
+      reference_code: string | null;
+    }>("SELECT id, reference_code FROM lends");
+
+    for (const lend of lendsToRewrite) {
+      if (isReferenceCode(lend.reference_code)) {
+        continue;
+      }
+
+      const referenceCode = await createUniqueReferenceForKind(db, "lend");
+      await db.runAsync("UPDATE lends SET reference_code = ? WHERE id = ?", [
+        referenceCode,
+        lend.id,
+      ]);
+    }
+
+    const creditorsToRewrite = await db.getAllAsync<{
+      id: number;
+      reference_code: string | null;
+    }>("SELECT id, reference_code FROM creditors");
+
+    for (const creditor of creditorsToRewrite) {
+      if (isReferenceCode(creditor.reference_code)) {
+        continue;
+      }
+
+      const referenceCode = await createUniqueReferenceForKind(db, "tab");
+      await db.runAsync(
+        "UPDATE creditors SET reference_code = ? WHERE id = ?",
+        [referenceCode, creditor.id],
+      );
+    }
+
+    currentDbVersion = 11;
+  }
+
+  if (currentDbVersion < 12) {
+    const creditorColumns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(creditors)",
+    );
+    const creditorColumnNames = new Set(creditorColumns.map((col) => col.name));
+
+    if (!creditorColumnNames.has("completed_at")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN completed_at DATETIME DEFAULT NULL;",
+      );
+    }
+
+    const completedCreditors = await db.getAllAsync<{
+      id: number;
+      completed_at: string | null;
+    }>("SELECT id, completed_at FROM creditors WHERE balance <= 0");
+
+    for (const creditor of completedCreditors) {
+      if (creditor.completed_at) {
+        continue;
+      }
+
+      const latestPayment = await db.getFirstAsync<{ created_at: string }>(
+        "SELECT created_at FROM creditor_payments WHERE creditor_id = ? ORDER BY created_at DESC LIMIT 1",
+        [creditor.id],
+      );
+
+      if (latestPayment?.created_at) {
+        await db.runAsync(
+          "UPDATE creditors SET completed_at = ? WHERE id = ?",
+          [latestPayment.created_at, creditor.id],
+        );
+      }
+    }
+
+    currentDbVersion = 12;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

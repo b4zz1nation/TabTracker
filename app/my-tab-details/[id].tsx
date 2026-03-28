@@ -6,6 +6,7 @@ import { Pressable, Text, View } from "react-native";
 import ScreenContainer from "@/components/screen-container";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCreditors } from "@/hooks/use-creditors";
+import { calculatePayoff } from "@/services/payoff";
 import { getReferenceLabel } from "@/services/reference";
 
 export default function MyTabDetailsScreen() {
@@ -38,42 +39,24 @@ export default function MyTabDetailsScreen() {
 
   const stats = useMemo(() => {
     if (!creditor) return null;
-
-    const start = new Date(creditor.created_at);
-    const now = new Date();
-    const diff = now.getTime() - start.getTime();
-    const dayMs = 1000 * 60 * 60 * 24;
-    let intervals = 0;
-    let label = "No interest";
-
-    if (creditor.interest_enabled && creditor.interest_type === "Daily") {
-      intervals = Math.floor(diff / dayMs);
-      label = `${intervals} Days`;
-    } else if (
-      creditor.interest_enabled &&
-      creditor.interest_type === "Monthly"
-    ) {
-      intervals = Math.floor(diff / (dayMs * 30.4375));
-      label = `${intervals} Months`;
-    } else if (
-      creditor.interest_enabled &&
-      creditor.interest_type === "Yearly"
-    ) {
-      intervals = Math.floor(diff / (dayMs * 365.25));
-      label = `${intervals} Years`;
-    }
-
-    const totalPaid = payments.reduce((sum, payment) => sum + payment.amount, 0);
-    const accruedInterest = creditor.interest_enabled
-      ? creditor.balance * ((creditor.interest_rate || 0) / 100) * intervals
-      : 0;
-    const payoffTotal = creditor.balance + accruedInterest;
+    const totalPaid = payments.reduce(
+      (sum, payment) => sum + payment.amount,
+      0,
+    );
+    const payoff = calculatePayoff({
+      principal: creditor.balance,
+      createdAt: creditor.created_at,
+      interestEnabled: creditor.interest_enabled === 1,
+      interestRate: creditor.interest_rate || 0,
+      interestType: creditor.interest_type,
+      completedAt: creditor.completed_at,
+    });
 
     return {
-      accruedInterest,
-      daysElapsed: Math.floor(diff / dayMs),
-      label,
-      payoffTotal,
+      accruedInterest: payoff.accruedInterest,
+      daysElapsed: payoff.daysElapsed,
+      label: payoff.label,
+      payoffTotal: creditor.completed_at ? totalPaid : payoff.payoffTotal,
       totalPaid,
     };
   }, [creditor, payments]);
@@ -136,7 +119,7 @@ export default function MyTabDetailsScreen() {
               Remaining Amount
             </Text>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">
-              â‚±{creditor.balance.toFixed(2)}
+              PHP {creditor.balance.toFixed(2)}
             </Text>
           </View>
 
@@ -175,7 +158,7 @@ export default function MyTabDetailsScreen() {
               Accumulated Interest
             </Text>
             <Text className="text-orange-500 font-black text-xl">
-              + â‚±{stats.accruedInterest.toFixed(2)}
+              + PHP {stats.accruedInterest.toFixed(2)}
             </Text>
           </View>
         </View>
@@ -186,7 +169,7 @@ export default function MyTabDetailsScreen() {
             {"\n"}(if settled now)
           </Text>
           <Text className="text-4xl font-black text-gray-900 dark:text-gray-100">
-            â‚±{stats.payoffTotal.toFixed(2)}
+            PHP {stats.payoffTotal.toFixed(2)}
           </Text>
         </View>
 
@@ -196,7 +179,7 @@ export default function MyTabDetailsScreen() {
               Total Paid (History)
             </Text>
             <Text className="text-sky-500 font-bold text-xs">
-              â‚±{stats.totalPaid.toFixed(2)}
+              PHP {stats.totalPaid.toFixed(2)}
             </Text>
           </View>
         </View>
@@ -212,10 +195,15 @@ export default function MyTabDetailsScreen() {
           </View>
         ) : null}
 
-        <View className="mt-4">
+        <View className="mt-4 gap-2">
           <Text className="text-[9px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">
-            Started {new Date(creditor.created_at).toLocaleDateString()}
+            Started {new Date(creditor.created_at).toLocaleString()}
           </Text>
+          {creditor.completed_at ? (
+            <Text className="text-[9px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">
+              Completed {new Date(creditor.completed_at).toLocaleString()}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -236,10 +224,10 @@ export default function MyTabDetailsScreen() {
                   </View>
                   <View>
                     <Text className="text-gray-900 dark:text-gray-100 font-bold text-sm">
-                      â‚±{payment.amount.toFixed(2)}
+                      PHP {payment.amount.toFixed(2)}
                     </Text>
                     <Text className="text-[10px] text-gray-400 dark:text-gray-500">
-                      {new Date(payment.created_at).toLocaleDateString()}
+                      {new Date(payment.created_at).toLocaleString()}
                     </Text>
                   </View>
                 </View>

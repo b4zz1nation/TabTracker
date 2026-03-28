@@ -33,6 +33,19 @@ export default function QuickAddScreen() {
   const contentX = useRef(new Animated.Value(0)).current;
 
   const allCreditors = useMemo(() => creditors, [creditors]);
+  const creditorTemplates = useMemo(() => {
+    const byName = new Map<string, (typeof creditors)[number]>();
+
+    for (const creditor of creditors) {
+      const normalizedName = creditor.name.trim().toLowerCase();
+      if (!normalizedName || byName.has(normalizedName)) {
+        continue;
+      }
+      byName.set(normalizedName, creditor);
+    }
+
+    return Array.from(byName.values());
+  }, [creditors]);
 
   useEffect(() => {
     Animated.parallel([
@@ -141,7 +154,7 @@ export default function QuickAddScreen() {
     setUnmounted(true);
     router.replace({
       pathname: "/my-tab-modal",
-      params: { id: item.id.toString() },
+      params: { id: item.id.toString(), mode: "add_existing" },
     });
   };
 
@@ -297,7 +310,9 @@ export default function QuickAddScreen() {
                 <Ionicons name="chevron-back" size={24} color="#9ca3af" />
               </Pressable>
               <Text className="text-xl font-black text-gray-900 dark:text-gray-100 ml-2">
-                {existingType === "lend" ? "Select Customer" : "Select My Tab"}
+                {existingType === "lend"
+                  ? "Select Customer"
+                  : "Select Creditor"}
               </Text>
             </View>
 
@@ -338,7 +353,7 @@ export default function QuickAddScreen() {
               />
             ) : (
               <FlatList
-                data={allCreditors}
+                data={creditorTemplates}
                 keyExtractor={(item) => `creditor-${item.id}`}
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
@@ -360,16 +375,9 @@ export default function QuickAddScreen() {
                         {item.name.charAt(0).toUpperCase()}
                       </Text>
                     </View>
-                    <View className="flex-1">
-                      <Text className="text-base font-bold text-gray-900 dark:text-gray-100">
-                        {item.name}
-                      </Text>
-                      {(item.balance || 0) > 0 && (
-                        <Text className="text-xs text-gray-400 dark:text-gray-500">
-                          Owe: PHP {(item.balance || 0).toFixed(2)}
-                        </Text>
-                      )}
-                    </View>
+                    <Text className="flex-1 text-base font-bold text-gray-900 dark:text-gray-100">
+                      {item.name}
+                    </Text>
                     <Ionicons
                       name="chevron-forward"
                       size={18}

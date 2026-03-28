@@ -24,6 +24,7 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Customer, useCustomers } from "@/hooks/use-customers";
 import { Creditor, useCreditors } from "@/hooks/use-creditors";
 import { useLends } from "@/hooks/use-lends";
+import { CreditorGroup, groupCreditors } from "@/services/creditor-groups";
 import { getUserProfile } from "@/services/user-profile";
 
 const AVATAR_COLORS = [
@@ -89,18 +90,10 @@ const CustomerCard = React.memo(
             <Text className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight leading-tight">
               {item.name}
             </Text>
-            {stats.interestBadge && (
-              <View className="flex-row items-center mt-1">
-                <Ionicons
-                  name="trending-up"
-                  size={12}
-                  color="#0ea5e9"
-                  style={{ marginRight: 4 }}
-                />
-                <Text className="text-[10px] text-sky-500 font-bold uppercase">
-                  {stats.interestBadge}
-                </Text>
-              </View>
+            {stats.lendCount > 1 && (
+              <Text className="text-[10px] text-sky-500 font-bold uppercase mt-1">
+                {stats.lendCount} entries
+              </Text>
             )}
           </View>
           <View className="items-end mr-2">
@@ -126,9 +119,9 @@ const CreditorCard = React.memo(
     router,
     openDeleteModal,
   }: {
-    item: Creditor;
+    item: CreditorGroup;
     router: any;
-    openDeleteModal: (id: number) => void;
+    openDeleteModal: (name: string) => void;
   }) => {
     const avatarColor = useMemo(() => {
       const index = item.name.charCodeAt(0) % CREDITOR_AVATAR_COLORS.length;
@@ -141,8 +134,8 @@ const CreditorCard = React.memo(
 
     const handleLongPress = useCallback(() => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-      openDeleteModal(item.id);
-    }, [openDeleteModal, item.id]);
+      openDeleteModal(item.name);
+    }, [openDeleteModal, item.name]);
 
     return (
       <View className="rounded-3xl mx-4 mb-3 bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
@@ -166,6 +159,11 @@ const CreditorCard = React.memo(
             <Text className="text-xl font-black text-gray-900 dark:text-gray-100 tracking-tight leading-tight">
               {item.name}
             </Text>
+            {item.entries.length > 1 && (
+              <Text className="text-[10px] text-orange-500 font-bold uppercase mt-1">
+                {item.entries.length} entries
+              </Text>
+            )}
           </View>
           <View className="items-end mr-2">
             <Text className="text-[8px] text-gray-400 dark:text-gray-500 uppercase tracking-widest font-black mb-1">
@@ -201,6 +199,9 @@ export default function HomeScreen() {
 
   // Modals for deletes
   const [deleteId, setDeleteId] = useState<number | null>(null);
+  const [deleteCreditorName, setDeleteCreditorName] = useState<string | null>(
+    null,
+  );
   const [deleteModalType, setDeleteModalType] = useState<
     "customer" | "creditor"
   >("customer");
@@ -223,7 +224,15 @@ export default function HomeScreen() {
         await refreshCustomers();
         await refreshLends();
       } else {
-        await deleteCreditor(deleteId);
+        if (deleteCreditorName) {
+          await db.runAsync(
+            "DELETE FROM creditors WHERE LOWER(name) = LOWER(?)",
+            [deleteCreditorName],
+          );
+          await refreshCreditors();
+        } else if (deleteId) {
+          await deleteCreditor(deleteId);
+        }
       }
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (err) {
@@ -232,8 +241,9 @@ export default function HomeScreen() {
   };
 
   const openDeleteModal = useCallback(
-    (id: number, type: "customer" | "creditor" = "customer") => {
-      setDeleteId(id);
+    (target: number | string, type: "customer" | "creditor" = "customer") => {
+      setDeleteId(typeof target === "number" ? target : null);
+      setDeleteCreditorName(type === "creditor" ? String(target) : null);
       setDeleteModalType(type);
       setDeleteModalMounted(true);
       deleteAnim.setValue(600);
@@ -272,6 +282,7 @@ export default function HomeScreen() {
       ]).start(() => {
         setDeleteModalMounted(false);
         setDeleteId(null);
+        setDeleteCreditorName(null);
         cb?.();
       });
     },
@@ -331,7 +342,7 @@ export default function HomeScreen() {
     [creditors],
   );
   const activeCreditors = useMemo(
-    () => creditors.filter((c) => (c.balance || 0) > 0),
+    () => groupCreditors(creditors).filter((group) => group.balance > 0),
     [creditors],
   );
 

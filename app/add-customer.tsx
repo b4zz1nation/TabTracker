@@ -21,7 +21,10 @@ import { useCustomers } from "@/hooks/use-customers";
 import { useLends } from "@/hooks/use-lends";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import ScreenContainer from "@/components/screen-container";
-import { getReferenceLabel } from "@/services/reference";
+import {
+  createUniqueReferenceForKind,
+  getReferenceLabel,
+} from "@/services/reference";
 
 export default function AddCustomerScreen() {
   const router = useRouter();
@@ -278,9 +281,11 @@ export default function AddCustomerScreen() {
           ],
         );
       } else if (customerId) {
+        const referenceCode = await createUniqueReferenceForKind(db, "lend");
         await db.runAsync(
-          "INSERT INTO lends (customer_id, amount, status, interest_enabled, interest_rate, interest_type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO lends (reference_code, customer_id, amount, status, interest_enabled, interest_rate, interest_type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
+            referenceCode,
             Number(customerId),
             numAmount,
             "Ongoing",
@@ -297,9 +302,11 @@ export default function AddCustomerScreen() {
           [trimmedName, numAmount],
         );
         const newCustomerId = result.lastInsertRowId;
+        const referenceCode = await createUniqueReferenceForKind(db, "lend");
         await db.runAsync(
-          "INSERT INTO lends (customer_id, amount, status, interest_enabled, interest_rate, interest_type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO lends (reference_code, customer_id, amount, status, interest_enabled, interest_rate, interest_type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
+            referenceCode,
             newCustomerId,
             numAmount,
             "Ongoing",
@@ -378,7 +385,7 @@ export default function AddCustomerScreen() {
           color={colorScheme === "dark" ? "#ffffff" : "#1f2937"}
         />
       </TouchableOpacity>
-      <Text className="text-xl font-bold text-gray-900 dark:text-gray-100 italic">
+      <Text className="text-xl font-bold text-gray-900 dark:text-gray-100">
         {isEditing ? (isReadOnly ? "Lend Receipt" : "Edit Lend") : "New Entry"}
       </Text>
       <View className="w-12" />
@@ -474,7 +481,7 @@ export default function AddCustomerScreen() {
                   Principal Paid
                 </Text>
                 <Text className="text-gray-900 dark:text-gray-100 font-bold text-base">
-                  ₱{displayAmount.toFixed(2)}
+                  PHP {displayAmount.toFixed(2)}
                 </Text>
               </View>
               <View className="flex-row justify-between">
@@ -493,7 +500,7 @@ export default function AddCustomerScreen() {
                     Accumulated
                   </Text>
                   <Text className="text-emerald-500 font-bold text-base">
-                    + ₱{interestAccumulated.toFixed(2)}
+                    + PHP {interestAccumulated.toFixed(2)}
                   </Text>
                 </View>
               )}
@@ -551,7 +558,7 @@ export default function AddCustomerScreen() {
                           </View>
                           <View>
                             <Text className="text-gray-900 dark:text-gray-100 font-bold text-xs">
-                              ₱{p.amount.toFixed(2)}
+                              PHP {p.amount.toFixed(2)}
                             </Text>
                             <Text className="text-[8px] text-gray-400 dark:text-gray-500 uppercase font-bold tracking-tighter">
                               {new Date(p.created_at).toLocaleDateString()}
@@ -595,7 +602,7 @@ export default function AddCustomerScreen() {
                 Total Settled
               </Text>
               <Text className="text-4xl font-black text-gray-900 dark:text-gray-100">
-                ₱{(historyTotal + interestAccumulated).toFixed(2)}
+                PHP {(historyTotal + interestAccumulated).toFixed(2)}
               </Text>
             </View>
           </View>
@@ -701,7 +708,7 @@ export default function AddCustomerScreen() {
             <View
               className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${errors.amount ? "border-red-500 bg-red-50/50 dark:bg-red-950/20" : "border-gray-200 dark:border-gray-800"} px-4 shadow-sm`}
             >
-              <Text className="text-2xl font-bold text-gray-400 mr-2">₱</Text>
+              <Text className="text-2xl font-bold text-gray-400 mr-2">PHP </Text>
               <TextInput
                 className="flex-1 h-16 text-3xl font-bold text-gray-900 dark:text-gray-100"
                 placeholder="0"
@@ -859,3 +866,4 @@ export default function AddCustomerScreen() {
     </View>
   );
 }
+

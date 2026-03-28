@@ -2,8 +2,6 @@ import React from "react";
 import {
   Animated,
   Keyboard,
-  KeyboardAvoidingView,
-  Platform,
   Pressable,
   StyleSheet,
   View,
@@ -58,69 +56,61 @@ export default function ScreenContainer({
         </View>
       )}
 
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === "ios" ? "padding" : undefined}
-        keyboardVerticalOffset={Platform.OS === "ios" ? 0 : 0}
-      >
-        <View style={styles.flex}>
-          {scrollable ? (
-            <KeyboardAwareScrollView
-              ref={scrollViewRef}
+      <View style={styles.flex}>
+        {scrollable ? (
+          <KeyboardAwareScrollView
+            ref={scrollViewRef}
+            style={styles.flex}
+            contentContainerStyle={[
+              styles.scrollContent,
+              centerContent && styles.center,
+              {
+                paddingBottom: footer
+                  ? 110 + insets.bottom
+                  : 30 + insets.bottom,
+              },
+              contentContainerStyle,
+            ]}
+            keyboardShouldPersistTaps="handled"
+            enableOnAndroid={true}
+            enableAutomaticScroll={true}
+            extraHeight={extraHeight}
+            extraScrollHeight={0}
+            showsVerticalScrollIndicator={false}
+            bounces={true}
+          >
+            <Pressable
+              onPress={Keyboard.dismiss}
               style={styles.flex}
-              contentContainerStyle={[
-                styles.scrollContent,
-                centerContent && styles.center,
-                // Add enough padding to clear the footer (approx 80-100px + safe area)
-                {
-                  paddingBottom: footer
-                    ? 110 + insets.bottom
-                    : 30 + insets.bottom,
-                },
-                contentContainerStyle,
-              ]}
-              keyboardShouldPersistTaps="handled"
-              enableOnAndroid={true} // Enable for better Android handling
-              enableAutomaticScroll={true}
-              extraHeight={extraHeight}
-              extraScrollHeight={0}
-              showsVerticalScrollIndicator={false}
-              bounces={true}
-            >
-              <Pressable
-                onPress={Keyboard.dismiss}
-                style={styles.flex}
-                accessible={false}
-              >
-                {children}
-              </Pressable>
-            </KeyboardAwareScrollView>
-          ) : (
-            <View
-              style={[
-                styles.flex,
-                centerContent && styles.center,
-                contentContainerStyle,
-              ]}
+              accessible={false}
             >
               {children}
-            </View>
-          )}
-        </View>
-
-        {/* 2. FOOTER that follows keyboard and stays above it */}
-        {footer && (
-          <Animated.View
-            className="bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-900 z-10 w-full shadow-[0_-4px_10px_rgba(0,0,0,0.03)]"
+            </Pressable>
+          </KeyboardAwareScrollView>
+        ) : (
+          <View
             style={[
-              { paddingBottom: Math.max(insets.bottom, 12) },
-              footerContainerStyle,
+              styles.flex,
+              centerContent && styles.center,
+              contentContainerStyle,
             ]}
           >
-            {footer}
-          </Animated.View>
+            {children}
+          </View>
         )}
-      </KeyboardAvoidingView>
+      </View>
+
+      {footer && (
+        <Animated.View
+          className="bg-white dark:bg-gray-950 border-t border-gray-100 dark:border-gray-900 z-10 w-full shadow-[0_-4px_10px_rgba(0,0,0,0.03)]"
+          style={[
+            { paddingBottom: Math.max(insets.bottom, 12) },
+            footerContainerStyle,
+          ]}
+        >
+          {footer}
+        </Animated.View>
+      )}
     </SafeAreaView>
   );
 }

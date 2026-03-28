@@ -8,6 +8,7 @@ import ScreenContainer from "@/components/screen-container";
 import { useLends } from "@/hooks/use-lends";
 import { useCustomers } from "@/hooks/use-customers";
 import { useColorScheme } from "@/hooks/use-color-scheme";
+import { calculatePayoff } from "@/services/payoff";
 import { getReferenceLabel } from "@/services/reference";
 
 export default function LendDetailsScreen() {
@@ -40,54 +41,35 @@ export default function LendDetailsScreen() {
 
   const stats = useMemo(() => {
     if (!lend) return null;
-
-    const start = new Date(lend.created_at);
-    const now =
-      lend.status === "Completed" && lend.completed_at
-        ? new Date(lend.completed_at)
-        : new Date();
-    const diff = now.getTime() - start.getTime();
-    const dayMs = 1000 * 60 * 60 * 24;
-
-    let intervals = 0;
-    let label = "";
-
-    if (lend.interest_type === "Daily") {
-      intervals = Math.floor(diff / dayMs);
-      label = `${intervals} Days`;
-    } else if (lend.interest_type === "Monthly") {
-      intervals = Math.floor(diff / (dayMs * 30.4375));
-      label = `${intervals} Months`;
-    } else if (lend.interest_type === "Yearly") {
-      intervals = Math.floor(diff / (dayMs * 365.25));
-      label = `${intervals} Years`;
-    }
-
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const payoff = calculatePayoff({
+      principal: lend.amount,
+      createdAt: lend.created_at,
+      interestEnabled: lend.interest_enabled === 1,
+      interestRate: lend.interest_rate || 0,
+      interestType: lend.interest_type,
+      completedAt: lend.status === "Completed" ? lend.completed_at : null,
+    });
 
     // For completed lends, use history as the truth because amount is zeroed out
     if (lend.status === "Completed") {
       return {
-        intervals,
-        label,
+        intervals: payoff.intervals,
+        label: payoff.label,
         interest: 0, // In completed state, interest is already part of totalPaid
         total: totalPaid,
         totalPaid,
-        daysElapsed: Math.floor(diff / dayMs),
+        daysElapsed: payoff.daysElapsed,
       };
     }
 
-    const interest =
-      lend.amount * ((lend.interest_rate || 0) / 100) * intervals;
-    const total = lend.amount + interest;
-
     return {
-      intervals,
-      label,
-      interest,
-      total,
+      intervals: payoff.intervals,
+      label: payoff.label,
+      interest: payoff.accruedInterest,
+      total: payoff.payoffTotal,
       totalPaid,
-      daysElapsed: Math.floor(diff / dayMs),
+      daysElapsed: payoff.daysElapsed,
     };
   }, [lend, payments]);
 
@@ -158,7 +140,7 @@ export default function LendDetailsScreen() {
               Remaining Principal
             </Text>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">
-              ₱{lend.amount.toFixed(2)}
+              PHP {lend.amount.toFixed(2)}
             </Text>
           </View>
 
@@ -195,7 +177,7 @@ export default function LendDetailsScreen() {
               Accrued Interest
             </Text>
             <Text className="text-emerald-500 font-black text-xl">
-              + ₱{stats.interest.toFixed(2)}
+              + PHP {stats.interest.toFixed(2)}
             </Text>
           </View>
         </View>
@@ -207,7 +189,7 @@ export default function LendDetailsScreen() {
               : "Current Balance\n(if settled now)"}
           </Text>
           <Text className="text-4xl font-black text-gray-900 dark:text-gray-100">
-            ₱{stats.total.toFixed(2)}
+            PHP {stats.total.toFixed(2)}
           </Text>
         </View>
 
@@ -217,7 +199,7 @@ export default function LendDetailsScreen() {
               Total Paid (History)
             </Text>
             <Text className="text-sky-500 font-bold text-xs">
-              ₱{stats.totalPaid.toFixed(2)}
+              PHP {stats.totalPaid.toFixed(2)}
             </Text>
           </View>
         </View>
@@ -233,10 +215,15 @@ export default function LendDetailsScreen() {
           </View>
         ) : null}
 
-        <View className="mt-4">
+        <View className="mt-4 gap-2">
           <Text className="text-[9px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">
-            Started {new Date(lend.created_at).toLocaleDateString()}
+            Started {new Date(lend.created_at).toLocaleString()}
           </Text>
+          {lend.completed_at ? (
+            <Text className="text-[9px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">
+              Completed {new Date(lend.completed_at).toLocaleString()}
+            </Text>
+          ) : null}
         </View>
       </View>
 
@@ -258,10 +245,10 @@ export default function LendDetailsScreen() {
                   </View>
                   <View>
                     <Text className="text-gray-900 dark:text-gray-100 font-bold text-sm">
-                      ₱{p.amount.toFixed(2)}
+                      PHP {p.amount.toFixed(2)}
                     </Text>
                     <Text className="text-[10px] text-gray-400 dark:text-gray-500">
-                      {new Date(p.created_at).toLocaleDateString()}
+                      {new Date(p.created_at).toLocaleString()}
                     </Text>
                   </View>
                 </View>
