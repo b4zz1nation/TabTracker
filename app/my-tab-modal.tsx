@@ -93,12 +93,13 @@ export default function MyTabModalScreen() {
       : "",
   );
   const [interestType, setInterestType] = useState<
-    "Daily" | "Monthly" | "Yearly"
-  >(existingCreditor?.interest_type ?? "Monthly");
+    "Daily" | "Monthly" | "Yearly" | null
+  >(existingCreditor?.interest_type ?? null);
   const [formError, setFormError] = useState<string | null>(null);
   const [nameFocused, setNameFocused] = useState(false);
   const [amountFocused, setAmountFocused] = useState(false);
-  const [interestError, setInterestError] = useState(false);
+  const [interestRateError, setInterestRateError] = useState(false);
+  const [interestFrequencyError, setInterestFrequencyError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [payments, setPayments] = useState<
     { id: number; amount: number; created_at: string; creditor_id: number }[]
@@ -119,7 +120,7 @@ export default function MyTabModalScreen() {
         setDescription("");
         setInterestEnabled(false);
         setInterestRate("");
-        setInterestType("Monthly");
+        setInterestType(null);
       }
       return;
     }
@@ -140,9 +141,7 @@ export default function MyTabModalScreen() {
           : "",
     );
     setInterestType(
-      isAddingToExisting
-        ? "Monthly"
-        : (existingCreditor.interest_type ?? "Monthly"),
+      isAddingToExisting ? null : (existingCreditor.interest_type ?? null),
     );
   }, [existingCreditor, isAddingToExisting, isEditing]);
 
@@ -188,9 +187,9 @@ export default function MyTabModalScreen() {
   const sanitizeRate = useCallback(
     (text: string) => {
       setInterestRate(text.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"));
-      if (interestError) setInterestError(false);
+      if (interestRateError) setInterestRateError(false);
     },
-    [interestError],
+    [interestRateError],
   );
 
   const handleFocus = useCallback((reactNode: any, extraHeight?: number) => {
@@ -215,6 +214,8 @@ export default function MyTabModalScreen() {
           scrollInterestSectionToTop();
           interestInputRef.current?.focus();
         }, 100);
+      } else {
+        setInterestType(null);
       }
     },
     [scrollInterestSectionToTop],
@@ -244,7 +245,13 @@ export default function MyTabModalScreen() {
     if (interestEnabled) {
       const parsedRate = parseFloat(interestRate);
       if (!Number.isFinite(parsedRate) || parsedRate <= 0) {
-        setInterestError(true);
+        setInterestRateError(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+
+      if (!interestType) {
+        setInterestFrequencyError(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
@@ -359,6 +366,10 @@ export default function MyTabModalScreen() {
     if (isAddingToExisting) return "Add to Tab";
     return isEditing ? "Update Tab" : "Add Tab";
   }, [isAddingToExisting, isEditing, isSaving]);
+  const isNewTab = useMemo(
+    () => !isEditing && !isAddingToExisting,
+    [isAddingToExisting, isEditing],
+  );
 
   const avatarColor = useMemo(() => {
     const sourceName = name.trim() || existingCreditor?.name || "T";
@@ -607,82 +618,145 @@ export default function MyTabModalScreen() {
           </View>
         )}
 
-        <View className="flex-row items-center mb-10 px-1">
-          <View
-            className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${avatarColor}`}
-          >
-            <Text className="text-white font-bold text-base">
-              {(name.trim() || existingCreditor?.name || "T")
-                .charAt(0)
-                .toUpperCase()}
-            </Text>
-          </View>
-          <View>
-            <Text className="text-lg font-bold text-gray-900 dark:text-gray-100">
-              {name.trim() || existingCreditor?.name || "New Tab"}
-            </Text>
-          </View>
-        </View>
-
-        {!isAddingToExisting && (
-          <View className="mb-8">
-            <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
-              Tab Name
-            </Text>
+        {!isNewTab && (
+          <View className="flex-row items-center mb-10 px-1">
             <View
-              className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${
-                nameFocused
-                  ? "border-orange-500 bg-orange-50/50 dark:bg-orange-950/20"
-                  : "border-gray-200 dark:border-gray-800"
-              } px-4 shadow-sm`}
+              className={`w-10 h-10 rounded-full items-center justify-center mr-3 ${avatarColor}`}
             >
-              <TextInput
-                className="flex-1 h-16 text-xl font-bold text-gray-900 dark:text-gray-100"
-                placeholder="Tab name"
-                placeholderTextColor="#9ca3af"
-                value={name}
-                onChangeText={(text) => {
-                  setName(text);
-                  if (formError) setFormError(null);
-                }}
-                onFocus={() => setNameFocused(true)}
-                onBlur={() => setNameFocused(false)}
-                autoFocus={!isEditing}
-                editable={true}
-              />
+              <Text className="text-white font-bold text-base">
+                {(name.trim() || existingCreditor?.name || "T")
+                  .charAt(0)
+                  .toUpperCase()}
+              </Text>
+            </View>
+            <View>
+              <Text className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                {name.trim() || existingCreditor?.name || "New Tab"}
+              </Text>
             </View>
           </View>
         )}
 
-        <View className="mb-8">
-          <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
-            Amount Owed
-          </Text>
-          <View
-            className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${
-              amountFocused
-                ? "border-orange-500 bg-orange-50/50 dark:bg-orange-950/20"
-                : "border-gray-200 dark:border-gray-800"
-            } px-4 shadow-sm`}
-          >
-            <Text className="text-2xl font-bold text-gray-400 dark:text-gray-500 mr-2">
-              PHP
-            </Text>
-            <TextInput
-              className="flex-1 h-16 text-3xl font-bold text-gray-900 dark:text-gray-100"
-              placeholder="0.00"
-              placeholderTextColor="#9ca3af"
-              value={balance}
-              onChangeText={sanitizeBalance}
-              onFocus={(event) => {
-                setAmountFocused(true);
-                handleFocus(event.target);
-              }}
-              onBlur={() => setAmountFocused(false)}
-              keyboardType="numeric"
-            />
+        {isNewTab ? (
+          <View className="mb-8 flex-row items-start gap-3">
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
+                Tab Name
+              </Text>
+              <View
+                className={`bg-white dark:bg-gray-900 rounded-2xl border ${
+                  nameFocused
+                    ? "border-orange-500 bg-orange-50/50 dark:bg-orange-950/20"
+                    : "border-gray-200 dark:border-gray-800"
+                } px-4 shadow-sm`}
+              >
+                <TextInput
+                  className="h-16 text-lg font-bold text-gray-900 dark:text-gray-100"
+                  placeholder="Tab name"
+                  placeholderTextColor="#9ca3af"
+                  value={name}
+                  onChangeText={(text) => {
+                    setName(text);
+                    if (formError) setFormError(null);
+                  }}
+                  onFocus={() => setNameFocused(true)}
+                  onBlur={() => setNameFocused(false)}
+                  autoFocus={true}
+                  editable={true}
+                />
+              </View>
+            </View>
+
+            <View className="flex-1">
+              <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
+                Amount Owed
+              </Text>
+              <View
+                className={`bg-white dark:bg-gray-900 rounded-2xl border ${
+                  amountFocused
+                    ? "border-orange-500 bg-orange-50/50 dark:bg-orange-950/20"
+                    : "border-gray-200 dark:border-gray-800"
+                } px-4 shadow-sm`}
+              >
+                <TextInput
+                  className="h-16 text-lg font-bold text-gray-900 dark:text-gray-100"
+                  placeholder="0.00"
+                  placeholderTextColor="#9ca3af"
+                  value={balance}
+                  onChangeText={sanitizeBalance}
+                  onFocus={(event) => {
+                    setAmountFocused(true);
+                    handleFocus(event.target);
+                  }}
+                  onBlur={() => setAmountFocused(false)}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
           </View>
-        </View>
+        ) : (
+          <>
+            {!isAddingToExisting && (
+              <View className="mb-8">
+                <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
+                  Tab Name
+                </Text>
+                <View
+                  className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${
+                    nameFocused
+                      ? "border-orange-500 bg-orange-50/50 dark:bg-orange-950/20"
+                      : "border-gray-200 dark:border-gray-800"
+                  } px-4 shadow-sm`}
+                >
+                  <TextInput
+                    className="flex-1 h-16 text-xl font-bold text-gray-900 dark:text-gray-100"
+                    placeholder="Tab name"
+                    placeholderTextColor="#9ca3af"
+                    value={name}
+                    onChangeText={(text) => {
+                      setName(text);
+                      if (formError) setFormError(null);
+                    }}
+                    onFocus={() => setNameFocused(true)}
+                    onBlur={() => setNameFocused(false)}
+                    autoFocus={!isEditing}
+                    editable={true}
+                  />
+                </View>
+              </View>
+            )}
+
+            <View className="mb-8">
+              <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
+                Amount Owed
+              </Text>
+              <View
+                className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${
+                  amountFocused
+                    ? "border-orange-500 bg-orange-50/50 dark:bg-orange-950/20"
+                    : "border-gray-200 dark:border-gray-800"
+                } px-4 shadow-sm`}
+              >
+                <Text className="text-2xl font-bold text-gray-400 dark:text-gray-500 mr-2">
+                  PHP
+                </Text>
+                <TextInput
+                  className="flex-1 h-16 text-3xl font-bold text-gray-900 dark:text-gray-100"
+                  placeholder="0.00"
+                  placeholderTextColor="#9ca3af"
+                  value={balance}
+                  onChangeText={sanitizeBalance}
+                  onFocus={(event) => {
+                    setAmountFocused(true);
+                    handleFocus(event.target);
+                  }}
+                  onBlur={() => setAmountFocused(false)}
+                  keyboardType="numeric"
+                />
+              </View>
+            </View>
+          </>
+        )}
 
         <View className="mb-8">
           <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
@@ -750,15 +824,15 @@ export default function MyTabModalScreen() {
                   <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
                     Interest Rate
                   </Text>
-                  {interestError && (
-                    <Text className="text-[10px] text-red-500 font-black uppercase italic mr-1">
-                      Invalid Interest!
+                  {interestRateError && (
+                    <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                      Invalid interest rate
                     </Text>
                   )}
                 </View>
                 <View
                   className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${
-                    interestError
+                    interestRateError
                       ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
                       : "border-gray-200 dark:border-gray-800"
                   } px-4 shadow-sm`}
@@ -782,18 +856,30 @@ export default function MyTabModalScreen() {
               </View>
 
               <View>
-                <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
-                  Frequency
-                </Text>
+                <View className="flex-row items-center justify-between mb-2 ml-1">
+                  <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                    Frequency
+                  </Text>
+                  {interestFrequencyError && (
+                    <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                      Select a frequency
+                    </Text>
+                  )}
+                </View>
                 <View className="flex-row gap-2">
                   {(["Daily", "Monthly", "Yearly"] as const).map((type) => (
                     <TouchableOpacity
                       key={type}
-                      onPress={() => setInterestType(type)}
+                      onPress={() => {
+                        setInterestType(type);
+                        setInterestFrequencyError(false);
+                      }}
                       className={`flex-1 py-3 items-center rounded-xl border ${
                         interestType === type
                           ? "bg-orange-50 border-orange-200 dark:bg-orange-900/40 dark:border-orange-700"
-                          : "bg-transparent border-gray-100 dark:border-gray-800 dark:bg-gray-800"
+                          : interestFrequencyError
+                            ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
+                            : "bg-transparent border-gray-100 dark:border-gray-800 dark:bg-gray-800"
                       }`}
                     >
                       <Text
@@ -828,4 +914,3 @@ export default function MyTabModalScreen() {
     </View>
   );
 }
-

@@ -40,8 +40,8 @@ export default function AddLendScreen() {
   const [interestEnabled, setInterestEnabled] = useState(false);
   const [interestRate, setInterestRate] = useState("");
   const [interestType, setInterestType] = useState<
-    "Daily" | "Monthly" | "Yearly"
-  >("Monthly");
+    "Daily" | "Monthly" | "Yearly" | null
+  >(null);
   const [description, setDescription] = useState("");
   const [isSaving, setIsSaving] = useState(false);
   const scrollViewRef = useRef<any>(null);
@@ -51,7 +51,8 @@ export default function AddLendScreen() {
   const keyboardFooterGap = 18;
 
   const [errorVisible, setErrorVisible] = useState(false);
-  const [interestError, setInterestError] = useState(false);
+  const [interestRateError, setInterestRateError] = useState(false);
+  const [interestFrequencyError, setInterestFrequencyError] = useState(false);
 
   const handleToggleInterest = (val: boolean) => {
     setInterestEnabled(val);
@@ -59,6 +60,8 @@ export default function AddLendScreen() {
       setTimeout(() => {
         interestInputRef.current?.focus();
       }, 100);
+    } else {
+      setInterestType(null);
     }
   };
 
@@ -73,6 +76,7 @@ export default function AddLendScreen() {
 
   const handleRateChange = (text: string) => {
     setInterestRate(text.replace(/[^0-9.]/g, "").replace(/(\..*)\./, "$1"));
+    setInterestRateError(false);
   };
 
   useEffect(() => {
@@ -82,7 +86,7 @@ export default function AddLendScreen() {
         setAmount(lend.amount.toString());
         setInterestEnabled(lend.interest_enabled === 1);
         setInterestRate(lend.interest_rate?.toString() || "");
-        setInterestType(lend.interest_type || "Monthly");
+        setInterestType(lend.interest_type || null);
         setDescription(lend.description || "");
       }
     }
@@ -134,7 +138,13 @@ export default function AddLendScreen() {
     if (interestEnabled) {
       const numRate = parseFloat(interestRate);
       if (isNaN(numRate) || numRate <= 0) {
-        setInterestError(true);
+        setInterestRateError(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+
+      if (!interestType) {
+        setInterestFrequencyError(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
@@ -352,14 +362,14 @@ export default function AddLendScreen() {
                   <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
                     Interest Rate
                   </Text>
-                  {interestError && (
-                    <Text className="text-[10px] text-red-500 font-black uppercase italic mr-1">
-                      Invalid Interest!
+                  {interestRateError && (
+                    <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                      Invalid interest rate
                     </Text>
                   )}
                 </View>
                 <View
-                  className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${interestError ? "border-red-500 bg-red-50/50 dark:bg-red-950/20" : "border-gray-200 dark:border-gray-800"} px-4 shadow-sm`}
+                  className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${interestRateError ? "border-red-500 bg-red-50/50 dark:bg-red-950/20" : "border-gray-200 dark:border-gray-800"} px-4 shadow-sm`}
                 >
                   <TextInput
                     ref={interestInputRef}
@@ -369,7 +379,6 @@ export default function AddLendScreen() {
                     value={interestRate}
                     onChangeText={(t) => {
                       handleRateChange(t);
-                      setInterestError(false);
                     }}
                     onFocus={(event) => handleFocus(event.target, 300)}
                     keyboardType="numeric"
@@ -381,15 +390,25 @@ export default function AddLendScreen() {
               </View>
 
               <View>
-                <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
-                  Frequency
-                </Text>
+                <View className="flex-row items-center justify-between mb-2 ml-1">
+                  <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                    Frequency
+                  </Text>
+                  {interestFrequencyError && (
+                    <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                      Select a frequency
+                    </Text>
+                  )}
+                </View>
                 <View className="flex-row gap-2">
                   {(["Daily", "Monthly", "Yearly"] as const).map((type) => (
                     <TouchableOpacity
                       key={type}
-                      onPress={() => setInterestType(type)}
-                      className={`flex-1 py-3 items-center rounded-xl border ${interestType === type ? "bg-sky-50 border-sky-200 dark:bg-sky-900/40 dark:border-sky-700" : "bg-transparent border-gray-100 dark:border-gray-800 dark:bg-gray-800"}`}
+                      onPress={() => {
+                        setInterestType(type);
+                        setInterestFrequencyError(false);
+                      }}
+                      className={`flex-1 py-3 items-center rounded-xl border ${interestType === type ? "bg-sky-50 border-sky-200 dark:bg-sky-900/40 dark:border-sky-700" : interestFrequencyError ? "border-red-500 bg-red-50/50 dark:bg-red-950/20" : "bg-transparent border-gray-100 dark:border-gray-800 dark:bg-gray-800"}`}
                     >
                       <Text
                         className={`font-bold ${interestType === type ? "text-sky-600 dark:text-sky-400" : "text-gray-400"}`}
