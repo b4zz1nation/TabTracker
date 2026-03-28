@@ -3,19 +3,41 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
+import * as Notifications from "expo-notifications";
 import { Stack } from "expo-router";
-import { SQLiteProvider } from "expo-sqlite";
+import { SQLiteProvider, useSQLiteContext } from "expo-sqlite";
 import { StatusBar } from "expo-status-bar";
-import React, { Component, Suspense, useCallback } from "react";
-import { ActivityIndicator, Platform, Text, View } from "react-native";
+import React, {
+  Component,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+} from "react";
+import {
+  ActivityIndicator,
+  AppState,
+  Platform,
+  Text,
+  View,
+} from "react-native";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import "../global.css";
 
 import { AuthContext } from "@/contexts/auth-context";
+import {
+  NotificationsProvider,
+  useNotifications,
+} from "@/contexts/notifications-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { migrateDbIfNeeded } from "@/services/database";
+import {
+  evaluateDueReminders,
+  requestNotificationPermission,
+} from "@/services/notifications";
 import { SheetProvider } from "react-native-sheet-transitions";
+import { useRouter } from "expo-router";
 
 export const unstable_settings = {
   initialRouteName: "(tabs)",
@@ -61,6 +83,80 @@ class DatabaseErrorBoundary extends Component<
   }
 }
 
+function NotificationBootstrap({ children }: { children: React.ReactNode }) {
+  const router = useRouter();
+  const db = useSQLiteContext();
+  const { refreshUnreadCount } = useNotifications();
+  const responseListener = useRef<Notifications.EventSubscription | null>(null);
+
+  useEffect(() => {
+    requestNotificationPermission().catch((error) => {
+      console.error("Error requesting notification permission:", error);
+    });
+    evaluateDueReminders(db)
+      .then(() => refreshUnreadCount())
+      .catch((error) => {
+        console.error("Error evaluating due reminders:", error);
+      });
+  }, [db, refreshUnreadCount]);
+
+  useEffect(() => {
+    const sub = AppState.addEventListener("change", (state) => {
+      if (state !== "active") return;
+
+      evaluateDueReminders(db)
+        .then(() => refreshUnreadCount())
+        .catch((error) => {
+          console.error("Error evaluating due reminders:", error);
+        });
+    });
+
+    return () => {
+      sub.remove();
+    };
+  }, [db, refreshUnreadCount]);
+
+  useEffect(() => {
+    responseListener.current =
+      Notifications.addNotificationResponseReceivedListener((response) => {
+        const data = response.notification.request.content.data as Record<
+          string,
+          string
+        >;
+        const pathname = data?.pathname;
+        if (!pathname) {
+          return;
+        }
+
+        const params = Object.fromEntries(
+          Object.entries(data).filter(
+            ([key, value]) =>
+              key !== "pathname" &&
+              key !== "entityType" &&
+              key !== "referenceCode" &&
+              value,
+          ),
+        );
+
+        router.push({
+          pathname,
+          params,
+        });
+      });
+
+    return () => {
+      responseListener.current?.remove();
+      responseListener.current = null;
+    };
+  }, [router]);
+
+  useEffect(() => {
+    refreshUnreadCount();
+  }, [refreshUnreadCount]);
+
+  return <>{children}</>;
+}
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const markProfileReady = useCallback(() => {}, []);
@@ -87,50 +183,54 @@ export default function RootLayout() {
               onInit={migrateDbIfNeeded}
               useSuspense
             >
-              <ThemeProvider
-                value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
-              >
-                <SheetProvider>
-                  <Stack
-                    screenOptions={{
-                      headerShown: false,
-                      animation: "slide_from_right",
-                      fullScreenGestureEnabled: true,
-                      gestureEnabled: true,
-                      presentation: "card",
-                    }}
+              <NotificationsProvider>
+                <NotificationBootstrap>
+                  <ThemeProvider
+                    value={colorScheme === "dark" ? DarkTheme : DefaultTheme}
                   >
-                    <Stack.Screen
-                      name="index"
-                      options={{ animation: "none" }}
-                    />
-                    <Stack.Screen
-                      name="welcome"
-                      options={{ animation: "fade", gestureEnabled: false }}
-                    />
-                    <Stack.Screen name="(tabs)" />
-                    <Stack.Screen name="modal" />
-                    <Stack.Screen
-                      name="my-tab-modal"
-                      options={{ presentation: "modal" }}
-                    />
-                    <Stack.Screen name="add-customer" />
-                    <Stack.Screen name="add-lend" />
-                    <Stack.Screen name="select-customer" />
-                    <Stack.Screen
-                      name="quick-add"
-                      options={{
-                        presentation: "transparentModal",
-                        animation: "fade",
-                      }}
-                    />
-                    <Stack.Screen name="customer/[id]" />
-                    <Stack.Screen name="creditor/[id]" />
-                    <Stack.Screen name="relationships" />
-                  </Stack>
-                </SheetProvider>
-                <StatusBar style="auto" />
-              </ThemeProvider>
+                    <SheetProvider>
+                      <Stack
+                        screenOptions={{
+                          headerShown: false,
+                          animation: "slide_from_right",
+                          fullScreenGestureEnabled: true,
+                          gestureEnabled: true,
+                          presentation: "card",
+                        }}
+                      >
+                        <Stack.Screen
+                          name="index"
+                          options={{ animation: "none" }}
+                        />
+                        <Stack.Screen
+                          name="welcome"
+                          options={{ animation: "fade", gestureEnabled: false }}
+                        />
+                        <Stack.Screen name="(tabs)" />
+                        <Stack.Screen name="modal" />
+                        <Stack.Screen
+                          name="my-tab-modal"
+                          options={{ presentation: "modal" }}
+                        />
+                        <Stack.Screen name="add-customer" />
+                        <Stack.Screen name="add-lend" />
+                        <Stack.Screen name="select-customer" />
+                        <Stack.Screen
+                          name="quick-add"
+                          options={{
+                            presentation: "transparentModal",
+                            animation: "fade",
+                          }}
+                        />
+                        <Stack.Screen name="customer/[id]" />
+                        <Stack.Screen name="creditor/[id]" />
+                        <Stack.Screen name="relationships" />
+                      </Stack>
+                    </SheetProvider>
+                    <StatusBar style="auto" />
+                  </ThemeProvider>
+                </NotificationBootstrap>
+              </NotificationsProvider>
             </SQLiteProvider>
           </Suspense>
         </DatabaseErrorBoundary>

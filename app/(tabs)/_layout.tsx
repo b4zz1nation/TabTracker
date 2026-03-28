@@ -7,6 +7,7 @@ import * as Haptics from "expo-haptics";
 
 import { HapticTab } from "@/components/haptic-tab";
 import { Colors } from "@/constants/theme";
+import { useNotifications } from "@/contexts/notifications-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 
 export default function TabLayout() {
@@ -14,6 +15,7 @@ export default function TabLayout() {
   const themeColors = Colors[colorScheme ?? "light"];
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { unreadCount } = useNotifications();
   const tabBarBottomOffset = insets.bottom + 12;
   const tabBarHeight = 64;
   const sceneBottomPadding = tabBarHeight + tabBarBottomOffset;
@@ -75,6 +77,7 @@ export default function TabLayout() {
         name="notifications"
         options={{
           title: "Notifs",
+          tabBarBadge: unreadCount > 0 ? unreadCount : undefined,
           tabBarIcon: ({ color, focused }) => (
             <Ionicons
               size={24}

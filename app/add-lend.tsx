@@ -22,6 +22,37 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import ScreenContainer from "@/components/screen-container";
 import { createUniqueReferenceForKind } from "@/services/reference";
 
+function formatStoredDate(dateString?: string | null) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateInputToIso(dateInput: string) {
+  if (!dateInput.trim()) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) return null;
+
+  const [yearText, monthText, dayText] = dateInput.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(year, month - 1, day, 9, 0, 0, 0);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed.toISOString();
+}
+
 export default function AddLendScreen() {
   const router = useRouter();
   const { customer_id, customer_name, lend_id } = useLocalSearchParams<{
@@ -43,6 +74,8 @@ export default function AddLendScreen() {
     "Daily" | "Monthly" | "Yearly" | null
   >(null);
   const [description, setDescription] = useState("");
+  const [dueDateInput, setDueDateInput] = useState("");
+  const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const scrollViewRef = useRef<any>(null);
   const interestInputRef = useRef<TextInput>(null);
@@ -51,6 +84,7 @@ export default function AddLendScreen() {
   const keyboardFooterGap = 18;
 
   const [errorVisible, setErrorVisible] = useState(false);
+  const [dueDateError, setDueDateError] = useState(false);
   const [interestRateError, setInterestRateError] = useState(false);
   const [interestFrequencyError, setInterestFrequencyError] = useState(false);
 
@@ -74,6 +108,11 @@ export default function AddLendScreen() {
     setErrorVisible(false);
   };
 
+  const handleDueDateChange = (text: string) => {
+    setDueDateInput(text.replace(/[^0-9-]/g, "").slice(0, 10));
+    setDueDateError(false);
+  };
+
   const handleRateChange = (text: string) => {
     setInterestRate(text.replace(/[^0-9.]/g, "").replace(/(\..*)\./, "$1"));
     setInterestRateError(false);
@@ -88,6 +127,8 @@ export default function AddLendScreen() {
         setInterestRate(lend.interest_rate?.toString() || "");
         setInterestType(lend.interest_type || null);
         setDescription(lend.description || "");
+        setDueDateInput(formatStoredDate(lend.due_date));
+        setRemindersEnabled((lend.reminders_enabled ?? 1) === 1);
       }
     }
   }, [lend_id, lends]);
@@ -129,8 +170,15 @@ export default function AddLendScreen() {
 
   const handleSave = async () => {
     const numAmount = parseFloat(amount);
+    const dueDate = parseDateInputToIso(dueDateInput);
     if (isNaN(numAmount) || numAmount <= 0) {
       setErrorVisible(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    if (dueDateInput.trim() && !dueDate) {
+      setDueDateError(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
@@ -154,20 +202,22 @@ export default function AddLendScreen() {
       setIsSaving(true);
       if (isEditing) {
         await db.runAsync(
-          "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, description = ? WHERE id = ?",
+          "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, description = ?, due_date = ?, reminders_enabled = ? WHERE id = ?",
           [
             numAmount,
             interestEnabled ? 1 : 0,
             parseFloat(interestRate),
             interestType,
             description || null,
+            dueDate,
+            dueDate ? (remindersEnabled ? 1 : 0) : 0,
             Number(lend_id),
           ],
         );
       } else {
         const referenceCode = await createUniqueReferenceForKind(db, "lend");
         await db.runAsync(
-          "INSERT INTO lends (reference_code, customer_id, amount, status, interest_enabled, interest_rate, interest_type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO lends (reference_code, customer_id, amount, status, interest_enabled, interest_rate, interest_type, description, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             referenceCode,
             Number(customer_id),
@@ -177,6 +227,8 @@ export default function AddLendScreen() {
             parseFloat(interestRate),
             interestType,
             description || null,
+            dueDate,
+            dueDate ? (remindersEnabled ? 1 : 0) : 0,
             new Date().toISOString(),
           ],
         );
@@ -307,12 +359,67 @@ export default function AddLendScreen() {
         </View>
 
         <View className="mb-8">
+          <View className="flex-row items-center justify-between mb-2 ml-1">
+            <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+              Due Date (Optional)
+            </Text>
+            {dueDateError && (
+              <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                Use YYYY-MM-DD
+              </Text>
+            )}
+          </View>
+          <View
+            className={`bg-white dark:bg-gray-900 rounded-2xl border ${
+              dueDateError
+                ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
+                : "border-gray-200 dark:border-gray-800"
+            } px-4 shadow-sm`}
+          >
+            <TextInput
+              className="h-16 text-lg font-bold text-gray-900 dark:text-gray-100"
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#9ca3af"
+              value={dueDateInput}
+              onChangeText={handleDueDateChange}
+              keyboardType="numbers-and-punctuation"
+            />
+          </View>
+        </View>
+
+        <View className="mb-8 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">
+          <View className="flex-row items-center justify-between">
+            <View>
+              <Text className="text-base font-bold text-gray-900 dark:text-gray-100">
+                Due reminders
+              </Text>
+              <Text className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                {parseDateInputToIso(dueDateInput)
+                  ? "3 days before, 1 day before, due day, and overdue reminders"
+                  : "Add a due date first"}
+              </Text>
+            </View>
+            <Switch
+              value={remindersEnabled && !!parseDateInputToIso(dueDateInput)}
+              onValueChange={setRemindersEnabled}
+              trackColor={{ false: "#e5e7eb", true: "#bae6fd" }}
+              thumbColor={
+                remindersEnabled && !!parseDateInputToIso(dueDateInput)
+                  ? "#0ea5e9"
+                  : "#f3f4f6"
+              }
+              disabled={!parseDateInputToIso(dueDateInput)}
+            />
+          </View>
+        </View>
+
+        <View className="mb-8">
           <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
             Description (Optional)
           </Text>
-          <View className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-4 py-3 shadow-sm min-h-[100px]">
+          <View className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-4 py-3 shadow-sm min-h-[80px]">
             <TextInput
-              className="text-lg text-gray-900 dark:text-gray-100 min-h-[80px]"
+              className="text-lg text-gray-900 dark:text-gray-100 min-h-[60px]"
               placeholder="What's this for?"
               placeholderTextColor="#9ca3af"
               value={description}

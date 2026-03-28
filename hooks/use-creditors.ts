@@ -1,5 +1,12 @@
 import { useSQLiteContext } from "expo-sqlite";
 import { useState, useCallback, useEffect, useMemo } from "react";
+import {
+  formatNotificationCopy,
+  getNotificationPayloadData,
+  insertNotificationRecord,
+  requestNotificationPermission,
+  scheduleLocalNotification,
+} from "@/services/notifications";
 import { createUniqueReferenceForKind } from "@/services/reference";
 
 export interface Creditor {
@@ -11,6 +18,10 @@ export interface Creditor {
   interest_enabled: number;
   interest_rate: number;
   interest_type: "Daily" | "Monthly" | "Yearly" | null;
+  due_date?: string | null;
+  reminders_enabled?: number;
+  last_reminder_type?: string | null;
+  last_reminder_at?: string | null;
   created_at: string;
   completed_at?: string | null;
 }
@@ -49,6 +60,8 @@ export function useCreditors() {
       interestEnabled: boolean = false,
       interestRate: number = 0,
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
+      dueDate: string | null = null,
+      remindersEnabled: boolean = true,
       options?: {
         allowDuplicateName?: boolean;
       },
@@ -64,7 +77,7 @@ export function useCreditors() {
 
         const referenceCode = await createUniqueReferenceForKind(db, "tab");
         await db.runAsync(
-          "INSERT INTO creditors (reference_code, name, balance, description, interest_enabled, interest_rate, interest_type, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO creditors (reference_code, name, balance, description, interest_enabled, interest_rate, interest_type, due_date, reminders_enabled, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             referenceCode,
             name.trim(),
@@ -73,6 +86,8 @@ export function useCreditors() {
             interestEnabled ? 1 : 0,
             interestRate,
             interestType,
+            dueDate,
+            remindersEnabled ? 1 : 0,
             null,
           ],
         );
@@ -96,6 +111,8 @@ export function useCreditors() {
       interestEnabled: boolean = false,
       interestRate: number = 0,
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
+      dueDate: string | null = null,
+      remindersEnabled: boolean = true,
     ) => {
       try {
         const existing = await db.getFirstAsync<{ id: number }>(
@@ -105,7 +122,7 @@ export function useCreditors() {
         if (existing) throw new Error("DUPLICATE_NAME");
 
         await db.runAsync(
-          "UPDATE creditors SET name = ?, balance = ?, description = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, completed_at = CASE WHEN ? <= 0 THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = ?",
+          "UPDATE creditors SET name = ?, balance = ?, description = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, due_date = ?, reminders_enabled = ?, completed_at = CASE WHEN ? <= 0 THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = ?",
           [
             name.trim(),
             balance,
@@ -113,6 +130,8 @@ export function useCreditors() {
             interestEnabled ? 1 : 0,
             interestRate,
             interestType,
+            dueDate,
+            remindersEnabled ? 1 : 0,
             balance,
             id,
           ],
@@ -179,6 +198,41 @@ export function useCreditors() {
         await db.runAsync(
           "UPDATE creditors SET balance = ?, completed_at = NULL WHERE id = ?",
           [nextBalance, creditorId],
+        );
+      }
+
+      const titleBody = formatNotificationCopy({
+        entityType: "tab",
+        entityId: creditorId,
+        referenceCode: creditor.reference_code ?? creditorId.toString(),
+        kind: "payment_sent",
+        counterpartyName: creditor.name,
+        amount: paymentAmount,
+      });
+      const notificationPayload = getNotificationPayloadData(
+        "tab",
+        creditorId,
+        creditor.reference_code,
+      );
+      const dedupeKey = `tab:${creditor.reference_code ?? creditorId}:payment_sent:${now}`;
+
+      await insertNotificationRecord(db, {
+        entityType: "tab",
+        entityId: creditorId,
+        referenceCode: creditor.reference_code ?? null,
+        kind: "payment_sent",
+        title: titleBody.title,
+        body: titleBody.body,
+        sentAt: now,
+        dedupeKey,
+      });
+
+      const permission = await requestNotificationPermission();
+      if (permission.granted) {
+        await scheduleLocalNotification(
+          titleBody.title,
+          titleBody.body,
+          notificationPayload,
         );
       }
 

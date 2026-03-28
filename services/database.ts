@@ -5,7 +5,7 @@ import {
 } from "@/services/reference";
 
 export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
-  const DATABASE_VERSION = 12;
+  const DATABASE_VERSION = 13;
   let result = await db.getFirstAsync<{ user_version: number }>(
     "PRAGMA user_version",
   );
@@ -342,6 +342,88 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
     }
 
     currentDbVersion = 12;
+  }
+
+  if (currentDbVersion < 13) {
+    const lendColumns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(lends)",
+    );
+    const lendColumnNames = new Set(lendColumns.map((col) => col.name));
+
+    if (!lendColumnNames.has("due_date")) {
+      await db.execAsync(
+        "ALTER TABLE lends ADD COLUMN due_date DATETIME DEFAULT NULL;",
+      );
+    }
+    if (!lendColumnNames.has("reminders_enabled")) {
+      await db.execAsync(
+        "ALTER TABLE lends ADD COLUMN reminders_enabled INTEGER DEFAULT 1;",
+      );
+    }
+    if (!lendColumnNames.has("last_reminder_type")) {
+      await db.execAsync(
+        "ALTER TABLE lends ADD COLUMN last_reminder_type TEXT DEFAULT NULL;",
+      );
+    }
+    if (!lendColumnNames.has("last_reminder_at")) {
+      await db.execAsync(
+        "ALTER TABLE lends ADD COLUMN last_reminder_at DATETIME DEFAULT NULL;",
+      );
+    }
+
+    const creditorColumns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(creditors)",
+    );
+    const creditorColumnNames = new Set(creditorColumns.map((col) => col.name));
+
+    if (!creditorColumnNames.has("due_date")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN due_date DATETIME DEFAULT NULL;",
+      );
+    }
+    if (!creditorColumnNames.has("reminders_enabled")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN reminders_enabled INTEGER DEFAULT 1;",
+      );
+    }
+    if (!creditorColumnNames.has("last_reminder_type")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN last_reminder_type TEXT DEFAULT NULL;",
+      );
+    }
+    if (!creditorColumnNames.has("last_reminder_at")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN last_reminder_at DATETIME DEFAULT NULL;",
+      );
+    }
+
+    await db.execAsync(`
+      CREATE TABLE IF NOT EXISTS notifications (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        reference_code TEXT DEFAULT NULL,
+        kind TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        scheduled_for DATETIME DEFAULT NULL,
+        sent_at DATETIME DEFAULT NULL,
+        read_at DATETIME DEFAULT NULL,
+        dedupe_key TEXT NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+
+      CREATE UNIQUE INDEX IF NOT EXISTS idx_notifications_dedupe_key
+      ON notifications(dedupe_key);
+
+      CREATE INDEX IF NOT EXISTS idx_notifications_read_at
+      ON notifications(read_at);
+
+      CREATE INDEX IF NOT EXISTS idx_notifications_entity
+      ON notifications(entity_type, entity_id);
+    `);
+
+    currentDbVersion = 13;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

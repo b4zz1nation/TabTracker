@@ -26,6 +26,37 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { useCreditors } from "@/hooks/use-creditors";
 import { getReferenceLabel } from "@/services/reference";
 
+function formatStoredDate(dateString?: string | null) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "";
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function parseDateInputToIso(dateInput: string) {
+  if (!dateInput.trim()) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) return null;
+
+  const [yearText, monthText, dayText] = dateInput.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(year, month - 1, day, 9, 0, 0, 0);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed.toISOString();
+}
+
 const SPRING_CONFIG = {
   damping: 28,
   stiffness: 300,
@@ -84,6 +115,12 @@ export default function MyTabModalScreen() {
   const [description, setDescription] = useState(
     existingCreditor?.description ?? "",
   );
+  const [dueDateInput, setDueDateInput] = useState(
+    formatStoredDate(existingCreditor?.due_date),
+  );
+  const [remindersEnabled, setRemindersEnabled] = useState(
+    (existingCreditor?.reminders_enabled ?? 1) === 1,
+  );
   const [interestEnabled, setInterestEnabled] = useState(
     existingCreditor?.interest_enabled === 1,
   );
@@ -98,6 +135,7 @@ export default function MyTabModalScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [nameFocused, setNameFocused] = useState(false);
   const [amountFocused, setAmountFocused] = useState(false);
+  const [dueDateError, setDueDateError] = useState(false);
   const [interestRateError, setInterestRateError] = useState(false);
   const [interestFrequencyError, setInterestFrequencyError] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -118,6 +156,8 @@ export default function MyTabModalScreen() {
         setName("");
         setBalance("");
         setDescription("");
+        setDueDateInput("");
+        setRemindersEnabled(true);
         setInterestEnabled(false);
         setInterestRate("");
         setInterestType(null);
@@ -129,6 +169,14 @@ export default function MyTabModalScreen() {
     setBalance(isAddingToExisting ? "" : existingCreditor.balance.toString());
     setDescription(
       isAddingToExisting ? "" : (existingCreditor.description ?? ""),
+    );
+    setDueDateInput(
+      isAddingToExisting ? "" : formatStoredDate(existingCreditor.due_date),
+    );
+    setRemindersEnabled(
+      isAddingToExisting
+        ? true
+        : (existingCreditor.reminders_enabled ?? 1) === 1,
     );
     setInterestEnabled(
       isAddingToExisting ? false : existingCreditor.interest_enabled === 1,
@@ -184,6 +232,11 @@ export default function MyTabModalScreen() {
     setBalance(text.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"));
   }, []);
 
+  const sanitizeDueDate = useCallback((text: string) => {
+    setDueDateInput(text.replace(/[^0-9-]/g, "").slice(0, 10));
+    setDueDateError(false);
+  }, []);
+
   const sanitizeRate = useCallback(
     (text: string) => {
       setInterestRate(text.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"));
@@ -233,12 +286,19 @@ export default function MyTabModalScreen() {
       normalizedBalance === "" ? 0 : parseFloat(normalizedBalance);
     const nextBalance = Number.isFinite(parsedBalance) ? parsedBalance : 0;
     const trimmedDescription = description.trim();
+    const dueDate = parseDateInputToIso(dueDateInput);
 
     if (
       !trimmedName ||
       normalizedBalance === "" ||
       !Number.isFinite(parsedBalance)
     ) {
+      return;
+    }
+
+    if (dueDateInput.trim() && !dueDate) {
+      setDueDateError(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
 
@@ -273,6 +333,8 @@ export default function MyTabModalScreen() {
           interestEnabled,
           nextRate,
           nextType,
+          dueDate,
+          dueDate ? remindersEnabled : false,
           { allowDuplicateName: true },
         );
       } else if (isEditing) {
@@ -284,6 +346,8 @@ export default function MyTabModalScreen() {
           interestEnabled,
           nextRate,
           nextType,
+          dueDate,
+          dueDate ? remindersEnabled : false,
         );
       } else {
         await addCreditor(
@@ -293,6 +357,8 @@ export default function MyTabModalScreen() {
           interestEnabled,
           nextRate,
           nextType,
+          dueDate,
+          dueDate ? remindersEnabled : false,
         );
       }
 
@@ -311,6 +377,7 @@ export default function MyTabModalScreen() {
     addCreditor,
     balance,
     description,
+    dueDateInput,
     hasExistingCreditorId,
     interestEnabled,
     interestRate,
@@ -319,6 +386,7 @@ export default function MyTabModalScreen() {
     isEditing,
     isReadOnly,
     name,
+    remindersEnabled,
     existingCreditor,
     params.id,
     router,
@@ -759,12 +827,67 @@ export default function MyTabModalScreen() {
         )}
 
         <View className="mb-8">
+          <View className="flex-row items-center justify-between mb-2 ml-1">
+            <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+              Due Date (Optional)
+            </Text>
+            {dueDateError && (
+              <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                Use YYYY-MM-DD
+              </Text>
+            )}
+          </View>
+          <View
+            className={`bg-white dark:bg-gray-900 rounded-2xl border ${
+              dueDateError
+                ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
+                : "border-gray-200 dark:border-gray-800"
+            } px-4 shadow-sm`}
+          >
+            <TextInput
+              className="h-16 text-lg font-bold text-gray-900 dark:text-gray-100"
+              placeholder="YYYY-MM-DD"
+              placeholderTextColor="#9ca3af"
+              value={dueDateInput}
+              onChangeText={sanitizeDueDate}
+              keyboardType="numbers-and-punctuation"
+            />
+          </View>
+        </View>
+
+        <View className="mb-8 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">
+          <View className="flex-row items-center justify-between">
+            <View>
+              <Text className="text-base font-bold text-gray-900 dark:text-gray-100">
+                Due reminders
+              </Text>
+              <Text className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                {parseDateInputToIso(dueDateInput)
+                  ? "3 days before, 1 day before, due day, and overdue reminders"
+                  : "Add a due date first"}
+              </Text>
+            </View>
+            <Switch
+              value={remindersEnabled && !!parseDateInputToIso(dueDateInput)}
+              onValueChange={setRemindersEnabled}
+              trackColor={{ false: "#e5e7eb", true: "#fed7aa" }}
+              thumbColor={
+                remindersEnabled && !!parseDateInputToIso(dueDateInput)
+                  ? "#f97316"
+                  : "#f3f4f6"
+              }
+              disabled={!parseDateInputToIso(dueDateInput)}
+            />
+          </View>
+        </View>
+
+        <View className="mb-8">
           <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-2 ml-1">
             Description (Optional)
           </Text>
-          <View className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-4 py-3 shadow-sm min-h-[100px]">
+          <View className="bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-4 py-3 shadow-sm min-h-[80px]">
             <TextInput
-              className="text-lg text-gray-900 dark:text-gray-100 min-h-[80px]"
+              className="text-lg text-gray-900 dark:text-gray-100 min-h-[60px]"
               placeholder="What's this for?"
               placeholderTextColor="#9ca3af"
               value={description}

@@ -1,5 +1,12 @@
 import { useSQLiteContext } from "expo-sqlite";
 import { useState, useCallback, useEffect, useMemo } from "react";
+import {
+  formatNotificationCopy,
+  getNotificationPayloadData,
+  insertNotificationRecord,
+  requestNotificationPermission,
+  scheduleLocalNotification,
+} from "@/services/notifications";
 import { createUniqueReferenceForKind } from "@/services/reference";
 
 export interface Lend {
@@ -12,6 +19,10 @@ export interface Lend {
   interest_type: "Daily" | "Monthly" | "Yearly" | null;
   status: "Ongoing" | "Completed";
   description?: string | null;
+  due_date?: string | null;
+  reminders_enabled?: number;
+  last_reminder_type?: string | null;
+  last_reminder_at?: string | null;
   created_at: string;
   completed_at: string | null;
 }
@@ -43,11 +54,13 @@ export function useLends() {
       interestRate: number = 0,
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
       description: string | null = null,
+      dueDate: string | null = null,
+      remindersEnabled: boolean = true,
     ) => {
       const now = new Date().toISOString();
       const referenceCode = await createUniqueReferenceForKind(db, "lend");
       await db.runAsync(
-        "INSERT INTO lends (reference_code, customer_id, amount, interest_enabled, interest_rate, interest_type, description, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO lends (reference_code, customer_id, amount, interest_enabled, interest_rate, interest_type, description, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           referenceCode,
           customerId,
@@ -56,6 +69,8 @@ export function useLends() {
           interestRate,
           interestType,
           description,
+          dueDate,
+          remindersEnabled ? 1 : 0,
           now,
         ],
       );
@@ -72,15 +87,19 @@ export function useLends() {
       interestRate: number = 0,
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
       description: string | null = null,
+      dueDate: string | null = null,
+      remindersEnabled: boolean = true,
     ) => {
       await db.runAsync(
-        "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, description = ? WHERE id = ?",
+        "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, description = ?, due_date = ?, reminders_enabled = ? WHERE id = ?",
         [
           amount,
           interestEnabled ? 1 : 0,
           interestRate,
           interestType,
           description,
+          dueDate,
+          remindersEnabled ? 1 : 0,
           id,
         ],
       );
@@ -141,6 +160,45 @@ export function useLends() {
         newTotalBalance,
         lend.customer_id,
       ]);
+
+      const customer = await db.getFirstAsync<{ name: string }>(
+        "SELECT name FROM customers WHERE id = ?",
+        [lend.customer_id],
+      );
+      const titleBody = formatNotificationCopy({
+        entityType: "lend",
+        entityId: lendId,
+        referenceCode: lend.reference_code ?? lendId.toString(),
+        kind: "payment_received",
+        counterpartyName: customer?.name ?? "Customer",
+        amount: paymentAmount,
+      });
+      const notificationPayload = getNotificationPayloadData(
+        "lend",
+        lendId,
+        lend.reference_code,
+      );
+      const dedupeKey = `lend:${lend.reference_code ?? lendId}:payment_received:${now}`;
+
+      await insertNotificationRecord(db, {
+        entityType: "lend",
+        entityId: lendId,
+        referenceCode: lend.reference_code ?? null,
+        kind: "payment_received",
+        title: titleBody.title,
+        body: titleBody.body,
+        sentAt: now,
+        dedupeKey,
+      });
+
+      const permission = await requestNotificationPermission();
+      if (permission.granted) {
+        await scheduleLocalNotification(
+          titleBody.title,
+          titleBody.body,
+          notificationPayload,
+        );
+      }
 
       await fetchAllLends();
     },
