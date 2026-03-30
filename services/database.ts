@@ -5,7 +5,7 @@ import {
 } from "@/services/reference";
 
 export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
-  const DATABASE_VERSION = 13;
+  const DATABASE_VERSION = 14;
   let result = await db.getFirstAsync<{ user_version: number }>(
     "PRAGMA user_version",
   );
@@ -424,6 +424,32 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
     `);
 
     currentDbVersion = 13;
+  }
+
+  if (currentDbVersion < 14) {
+    const lendColumns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(lends)",
+    );
+    const lendColumnNames = new Set(lendColumns.map((col) => col.name));
+
+    if (!lendColumnNames.has("overdue_interest_rate")) {
+      await db.execAsync(
+        "ALTER TABLE lends ADD COLUMN overdue_interest_rate REAL DEFAULT NULL;",
+      );
+    }
+
+    const creditorColumns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(creditors)",
+    );
+    const creditorColumnNames = new Set(creditorColumns.map((col) => col.name));
+
+    if (!creditorColumnNames.has("overdue_interest_rate")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN overdue_interest_rate REAL DEFAULT NULL;",
+      );
+    }
+
+    currentDbVersion = 14;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

@@ -1,5 +1,4 @@
-import { useSQLiteContext } from "expo-sqlite";
-import { View, Text, Pressable, ScrollView } from "react-native";
+import { View, Text, Pressable } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
 import { useMemo, useState, useEffect } from "react";
@@ -11,10 +10,43 @@ import { useColorScheme } from "@/hooks/use-color-scheme";
 import { calculatePayoff } from "@/services/payoff";
 import { getReferenceLabel } from "@/services/reference";
 
+function formatDateLabel(dateString?: string | null) {
+  if (!dateString) return "Not set";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "Not set";
+  return date.toLocaleDateString();
+}
+
+function getDueStatusLabel(
+  dueDate?: string | null,
+  referenceDate?: string | null,
+) {
+  if (!dueDate) return "No deadline";
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) return "No deadline";
+
+  const reference = referenceDate ? new Date(referenceDate) : new Date();
+  if (Number.isNaN(reference.getTime())) return "No deadline";
+
+  const refStart = new Date(
+    reference.getFullYear(),
+    reference.getMonth(),
+    reference.getDate(),
+  );
+  const dueStart = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const diffDays = Math.floor(
+    (dueStart.getTime() - refStart.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  if (diffDays > 0) return `Due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
+  if (diffDays < 0)
+    return `Past due by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"}`;
+  return "Due today";
+}
+
 export default function LendDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
-  const db = useSQLiteContext();
   const { lends, getPayments } = useLends();
   const { customers } = useCustomers();
   const colorScheme = useColorScheme();
@@ -42,36 +74,33 @@ export default function LendDetailsScreen() {
   const stats = useMemo(() => {
     if (!lend) return null;
     const totalPaid = payments.reduce((sum, p) => sum + p.amount, 0);
+    const principalForCalculation =
+      lend.status === "Completed" ? lend.amount + totalPaid : lend.amount;
     const payoff = calculatePayoff({
-      principal: lend.amount,
+      principal: principalForCalculation,
       createdAt: lend.created_at,
+      dueDate: lend.due_date,
       interestEnabled: lend.interest_enabled === 1,
       interestRate: lend.interest_rate || 0,
+      overdueInterestRate: lend.overdue_interest_rate ?? null,
       interestType: lend.interest_type,
       completedAt: lend.status === "Completed" ? lend.completed_at : null,
     });
-
-    // For completed lends, use history as the truth because amount is zeroed out
-    if (lend.status === "Completed") {
-      return {
-        intervals: payoff.intervals,
-        label: payoff.label,
-        interest: 0, // In completed state, interest is already part of totalPaid
-        total: totalPaid,
-        totalPaid,
-        daysElapsed: payoff.daysElapsed,
-      };
-    }
 
     return {
       intervals: payoff.intervals,
       label: payoff.label,
       interest: payoff.accruedInterest,
-      total: payoff.payoffTotal,
+      total: lend.status === "Completed" ? totalPaid : payoff.payoffTotal,
       totalPaid,
       daysElapsed: payoff.daysElapsed,
     };
   }, [lend, payments]);
+  const baseRate = lend?.interest_enabled ? lend.interest_rate || 0 : 0;
+  const overdueRate =
+    lend?.interest_enabled && (lend.overdue_interest_rate ?? 0) > 0
+      ? lend.overdue_interest_rate!
+      : null;
 
   if (!lend || !stats) {
     return (
@@ -147,14 +176,58 @@ export default function LendDetailsScreen() {
           <View className="flex-row justify-between">
             <View>
               <Text className="text-gray-400 dark:text-gray-500 font-medium">
-                Agreement
+                Base Rate
               </Text>
               <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
-                {lend.interest_type}
+                {lend.interest_enabled ? lend.interest_type : "No interest"}
               </Text>
             </View>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">
-              {lend.interest_rate}%
+              {lend.interest_enabled ? `${baseRate}%` : "0%"}
+            </Text>
+          </View>
+
+          <View className="flex-row justify-between">
+            <View>
+              <Text className="text-gray-400 dark:text-gray-500 font-medium">
+                After Due Rate
+              </Text>
+              <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                Applies only after due date
+              </Text>
+            </View>
+            <Text className="text-gray-900 dark:text-gray-100 font-bold">
+              {lend.interest_enabled
+                ? overdueRate !== null
+                  ? `${overdueRate}%`
+                  : "Same as base"
+                : "N/A"}
+            </Text>
+          </View>
+
+          <View className="flex-row justify-between">
+            <View>
+              <Text className="text-gray-400 dark:text-gray-500 font-medium">
+                Due Date
+              </Text>
+              <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                Deadline
+              </Text>
+            </View>
+            <Text className="text-gray-900 dark:text-gray-100 font-bold">
+              {formatDateLabel(lend.due_date)}
+            </Text>
+          </View>
+
+          <View className="flex-row justify-between">
+            <Text className="text-gray-400 dark:text-gray-500 font-medium">
+              Due Status
+            </Text>
+            <Text className="text-gray-900 dark:text-gray-100 font-bold">
+              {getDueStatusLabel(
+                lend.due_date,
+                lend.status === "Completed" ? lend.completed_at : null,
+              )}
             </Text>
           </View>
 
@@ -210,7 +283,7 @@ export default function LendDetailsScreen() {
               Description
             </Text>
             <Text className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed italic">
-              "{lend.description}"
+              {`"${lend.description}"`}
             </Text>
           </View>
         ) : null}

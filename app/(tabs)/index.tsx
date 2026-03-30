@@ -3,13 +3,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
 import { useSQLiteContext } from "expo-sqlite";
-import React, {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import React, { useCallback, useMemo, useRef, useState } from "react";
 import {
   Animated,
   FlatList,
@@ -20,12 +14,11 @@ import {
 } from "react-native";
 import ScreenContainer from "@/components/screen-container";
 
-import { useColorScheme } from "@/hooks/use-color-scheme";
 import { Customer, useCustomers } from "@/hooks/use-customers";
-import { Creditor, useCreditors } from "@/hooks/use-creditors";
+import { useCreditors } from "@/hooks/use-creditors";
 import { useLends } from "@/hooks/use-lends";
 import { CreditorGroup, groupCreditors } from "@/services/creditor-groups";
-import { getUserProfile } from "@/services/user-profile";
+import { calculatePayoff } from "@/services/payoff";
 
 const AVATAR_COLORS = [
   "bg-sky-400",
@@ -101,9 +94,9 @@ const CustomerCard = React.memo(
               Balance
             </Text>
             <Text
-              className={`text-xl font-black ${item.balance > 0 ? "text-red-500" : "text-emerald-500"}`}
+              className={`text-xl font-black ${stats.totalOngoing > 0 ? "text-red-500" : "text-emerald-500"}`}
             >
-              ₱{Math.abs(item.balance || 0).toFixed(2)}
+              ₱{Math.abs(stats.totalOngoing || 0).toFixed(2)}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
@@ -112,6 +105,7 @@ const CustomerCard = React.memo(
     );
   },
 );
+CustomerCard.displayName = "CustomerCard";
 
 const CreditorCard = React.memo(
   ({
@@ -127,6 +121,25 @@ const CreditorCard = React.memo(
       const index = item.name.charCodeAt(0) % CREDITOR_AVATAR_COLORS.length;
       return CREDITOR_AVATAR_COLORS[index];
     }, [item.name]);
+    const liveOutstanding = useMemo(
+      () =>
+        item.entries.reduce(
+          (sum, entry) =>
+            sum +
+            calculatePayoff({
+              principal: entry.balance || 0,
+              createdAt: entry.created_at,
+              dueDate: entry.due_date,
+              interestEnabled: entry.interest_enabled === 1,
+              interestRate: entry.interest_rate || 0,
+              overdueInterestRate: entry.overdue_interest_rate ?? null,
+              interestType: entry.interest_type,
+              completedAt: null,
+            }).payoffTotal,
+          0,
+        ),
+      [item.entries],
+    );
 
     const handlePress = useCallback(() => {
       router.push(`/creditor/${item.id}`);
@@ -170,7 +183,7 @@ const CreditorCard = React.memo(
               You Owe
             </Text>
             <Text className="text-xl font-black text-orange-500">
-              ₱{(item.balance || 0).toFixed(2)}
+              ₱{liveOutstanding.toFixed(2)}
             </Text>
           </View>
           <Ionicons name="chevron-forward" size={18} color="#d1d5db" />
@@ -179,6 +192,7 @@ const CreditorCard = React.memo(
     );
   },
 );
+CreditorCard.displayName = "CreditorCard";
 
 export default function HomeScreen() {
   const { customers, refresh: refreshCustomers } = useCustomers();
@@ -192,7 +206,6 @@ export default function HomeScreen() {
   const router = useRouter();
   const { width } = useWindowDimensions();
 
-  const [userName, setUserName] = useState("");
   const [activePage, setActivePage] = useState(0);
   const flatRef = useRef<FlatList>(null);
   const scrollX = useRef(new Animated.Value(0)).current;
@@ -298,13 +311,6 @@ export default function HomeScreen() {
     }, [refreshCustomers, refreshLends, refreshCreditors]),
   );
 
-  useEffect(() => {
-    (async () => {
-      const p = await getUserProfile();
-      setUserName(p?.name ?? "");
-    })();
-  }, []);
-
   // Stats calculation
   const customerStats = useMemo(() => {
     const map: Record<number, any> = {};
@@ -312,7 +318,21 @@ export default function HomeScreen() {
       const cLends = lends.filter(
         (l) => l.customer_id === c.id && l.status === "Ongoing",
       );
-      const total = cLends.reduce((s, l) => s + l.amount, 0);
+      const total = cLends.reduce(
+        (sum, lend) =>
+          sum +
+          calculatePayoff({
+            principal: lend.amount,
+            createdAt: lend.created_at,
+            dueDate: lend.due_date,
+            interestEnabled: lend.interest_enabled === 1,
+            interestRate: lend.interest_rate || 0,
+            overdueInterestRate: lend.overdue_interest_rate ?? null,
+            interestType: lend.interest_type,
+            completedAt: null,
+          }).payoffTotal,
+        0,
+      );
       const withInterest = cLends.find(
         (l) => l.interest_enabled === 1 && l.interest_type,
       );
@@ -334,11 +354,45 @@ export default function HomeScreen() {
   }, [customers, lends]);
 
   const grandTotal = useMemo(
-    () => customers.reduce((s, c) => s + (c.balance || 0), 0),
-    [customers],
+    () =>
+      lends
+        .filter((lend) => lend.status === "Ongoing")
+        .reduce(
+          (sum, lend) =>
+            sum +
+            calculatePayoff({
+              principal: lend.amount,
+              createdAt: lend.created_at,
+              dueDate: lend.due_date,
+              interestEnabled: lend.interest_enabled === 1,
+              interestRate: lend.interest_rate || 0,
+              overdueInterestRate: lend.overdue_interest_rate ?? null,
+              interestType: lend.interest_type,
+              completedAt: null,
+            }).payoffTotal,
+          0,
+        ),
+    [lends],
   );
   const totalIOWe = useMemo(
-    () => creditors.reduce((s, c) => s + (c.balance || 0), 0),
+    () =>
+      creditors
+        .filter((creditor) => (creditor.balance || 0) > 0)
+        .reduce(
+          (sum, creditor) =>
+            sum +
+            calculatePayoff({
+              principal: creditor.balance || 0,
+              createdAt: creditor.created_at,
+              dueDate: creditor.due_date,
+              interestEnabled: creditor.interest_enabled === 1,
+              interestRate: creditor.interest_rate || 0,
+              overdueInterestRate: creditor.overdue_interest_rate ?? null,
+              interestType: creditor.interest_type,
+              completedAt: null,
+            }).payoffTotal,
+          0,
+        ),
     [creditors],
   );
   const activeCreditors = useMemo(
@@ -428,7 +482,7 @@ export default function HomeScreen() {
                 No Tabs Yet
               </Text>
               <Text className="text-gray-400 dark:text-gray-500 text-center leading-relaxed font-bold">
-                You're debt-free! Tap the add button to track a new tab you
+                You&apos;re debt-free! Tap the add button to track a new tab you
                 borrowed.
               </Text>
             </View>

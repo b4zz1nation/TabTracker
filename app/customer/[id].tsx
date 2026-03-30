@@ -56,7 +56,7 @@ export default function CustomerDetailScreen() {
     setLocalLends(lends.filter((l) => l.customer_id === customerId));
   }, [lends, customerId]);
 
-  const [hideCompleted, setHideCompleted] = useState(false);
+  const [hideCompleted] = useState(false);
   const [selectedLend, setSelectedLend] = useState<Lend | null>(null);
 
   // Sheet Animations
@@ -70,9 +70,6 @@ export default function CustomerDetailScreen() {
 
   // Delete Animations
   const [deleteId, setDeleteId] = useState<number | null>(null);
-  const [deleteStep, setDeleteStep] = useState<"initial" | "confirm">(
-    "initial",
-  );
   const [deleteModalMounted, setDeleteModalMounted] = useState(false);
   const deleteAnim = useRef(new Animated.Value(600)).current;
   const deleteBackdropAnim = useRef(new Animated.Value(0)).current;
@@ -80,7 +77,6 @@ export default function CustomerDetailScreen() {
   // Payment Modal State
   const [paymentModalVisible, setPaymentModalVisible] = useState(false);
   const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentModalHeight, setPaymentModalHeight] = useState(0);
   const [paymentCurrentBalance, setPaymentCurrentBalance] = useState("0.00");
   const [paymentError, setPaymentError] = useState<string | null>(null);
   const paymentSlideAnim = useRef(new Animated.Value(600)).current;
@@ -144,7 +140,12 @@ export default function CustomerDetailScreen() {
       showSub.remove();
       hideSub.remove();
     };
-  }, [paymentModalVisible]);
+  }, [
+    keyboardOffset,
+    paymentBackdropAnim,
+    paymentModalVisible,
+    paymentSlideAnim,
+  ]);
 
   useEffect(() => {
     Animated.spring(completeStepAnim, {
@@ -177,75 +178,83 @@ export default function CustomerDetailScreen() {
     });
   };
 
-  const openSheet = (lend: Lend) => {
-    sheetTransitionId.current += 1;
-    setSelectedLend(lend);
-    setSheetBlockingTouches(true);
-    setIsCompletingConfirm(false);
-    setSheetMounted(true);
-    sheetAnim.setValue(600);
-    sheetBackdropAnim.setValue(0);
-    Animated.parallel([
-      Animated.spring(sheetAnim, {
-        toValue: 0,
-        damping: 28,
-        stiffness: 300,
-        useNativeDriver: false,
-      }),
-      Animated.timing(sheetBackdropAnim, {
-        toValue: 1,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
-
-  const closeSheet = (cb?: () => void) => {
-    const transitionId = ++sheetTransitionId.current;
-    setSheetBlockingTouches(false);
-    Animated.parallel([
-      Animated.spring(sheetAnim, {
-        toValue: 600,
-        damping: 32,
-        stiffness: 350,
-        useNativeDriver: false,
-      }),
-      Animated.timing(sheetBackdropAnim, {
-        toValue: 0,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-    ]).start(() => {
-      if (sheetTransitionId.current !== transitionId) {
-        return;
-      }
-      setSheetMounted(false);
+  const openSheet = useCallback(
+    (lend: Lend) => {
+      sheetTransitionId.current += 1;
+      setSelectedLend(lend);
+      setSheetBlockingTouches(true);
       setIsCompletingConfirm(false);
-      completeStepAnim.setValue(0);
-      cb?.();
-    });
-  };
+      setSheetMounted(true);
+      sheetAnim.setValue(600);
+      sheetBackdropAnim.setValue(0);
+      Animated.parallel([
+        Animated.spring(sheetAnim, {
+          toValue: 0,
+          damping: 28,
+          stiffness: 300,
+          useNativeDriver: false,
+        }),
+        Animated.timing(sheetBackdropAnim, {
+          toValue: 1,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    },
+    [sheetAnim, sheetBackdropAnim],
+  );
 
-  const openDeleteModal = (id: number) => {
-    setDeleteId(id);
-    setDeleteStep("initial");
-    setDeleteModalMounted(true);
-    deleteAnim.setValue(600);
-    deleteBackdropAnim.setValue(0);
-    Animated.parallel([
-      Animated.spring(deleteAnim, {
-        toValue: 0,
-        damping: 28,
-        stiffness: 300,
-        useNativeDriver: true,
-      }),
-      Animated.timing(deleteBackdropAnim, {
-        toValue: 1,
-        duration: 120,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  };
+  const closeSheet = useCallback(
+    (cb?: () => void) => {
+      const transitionId = ++sheetTransitionId.current;
+      setSheetBlockingTouches(false);
+      Animated.parallel([
+        Animated.spring(sheetAnim, {
+          toValue: 600,
+          damping: 32,
+          stiffness: 350,
+          useNativeDriver: false,
+        }),
+        Animated.timing(sheetBackdropAnim, {
+          toValue: 0,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+      ]).start(() => {
+        if (sheetTransitionId.current !== transitionId) {
+          return;
+        }
+        setSheetMounted(false);
+        setIsCompletingConfirm(false);
+        completeStepAnim.setValue(0);
+        cb?.();
+      });
+    },
+    [completeStepAnim, sheetAnim, sheetBackdropAnim],
+  );
+
+  const openDeleteModal = useCallback(
+    (id: number) => {
+      setDeleteId(id);
+      setDeleteModalMounted(true);
+      deleteAnim.setValue(600);
+      deleteBackdropAnim.setValue(0);
+      Animated.parallel([
+        Animated.spring(deleteAnim, {
+          toValue: 0,
+          damping: 28,
+          stiffness: 300,
+          useNativeDriver: true,
+        }),
+        Animated.timing(deleteBackdropAnim, {
+          toValue: 1,
+          duration: 120,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    },
+    [deleteAnim, deleteBackdropAnim],
+  );
 
   const closeDeleteModal = (cb?: () => void) => {
     Animated.parallel([
@@ -290,7 +299,22 @@ export default function CustomerDetailScreen() {
     [localLends],
   );
   const totalOutstanding = useMemo(
-    () => ongoingLends.reduce((s, l) => s + l.amount, 0),
+    () =>
+      ongoingLends.reduce(
+        (sum, lend) =>
+          sum +
+          calculatePayoff({
+            principal: lend.amount,
+            createdAt: lend.created_at,
+            dueDate: lend.due_date,
+            interestEnabled: lend.interest_enabled === 1,
+            interestRate: lend.interest_rate || 0,
+            overdueInterestRate: lend.overdue_interest_rate ?? null,
+            interestType: lend.interest_type,
+            completedAt: null,
+          }).payoffTotal,
+        0,
+      ),
     [ongoingLends],
   );
 
@@ -328,8 +352,10 @@ export default function CustomerDetailScreen() {
     const payoff = calculatePayoff({
       principal: l.amount,
       createdAt: l.created_at,
+      dueDate: l.due_date,
       interestEnabled: l.interest_enabled === 1,
       interestRate: l.interest_rate || 0,
+      overdueInterestRate: l.overdue_interest_rate ?? null,
       interestType: l.interest_type,
       completedAt: l.completed_at,
     });
@@ -382,24 +408,18 @@ export default function CustomerDetailScreen() {
 
   const handleConfirmCompleteLend = async () => {
     if (!selectedLend) return;
-    const l = selectedLend;
-    const start = new Date(l.created_at);
-    const now = new Date();
-    const dayMs = 1000 * 60 * 60 * 24;
-    let intervals = 0;
-    if (l.interest_type === "Daily")
-      intervals = Math.floor((now.getTime() - start.getTime()) / dayMs);
-    else if (l.interest_type === "Monthly")
-      intervals = Math.floor(
-        (now.getTime() - start.getTime()) / (dayMs * 30.4375),
-      );
-    else if (l.interest_type === "Yearly")
-      intervals = Math.floor(
-        (now.getTime() - start.getTime()) / (dayMs * 365.25),
-      );
-    const totalNow =
-      l.amount + l.amount * ((l.interest_rate || 0) / 100) * intervals;
-    await addPayment(l.id, totalNow);
+    const payoff = calculatePayoff({
+      principal: selectedLend.amount,
+      createdAt: selectedLend.created_at,
+      dueDate: selectedLend.due_date,
+      interestEnabled: selectedLend.interest_enabled === 1,
+      interestRate: selectedLend.interest_rate || 0,
+      overdueInterestRate: selectedLend.overdue_interest_rate ?? null,
+      interestType: selectedLend.interest_type,
+      completedAt: selectedLend.completed_at,
+    });
+    const totalNow = payoff.payoffTotal;
+    await addPayment(selectedLend.id, totalNow);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     refreshAll();
     closeSheet();
@@ -424,6 +444,28 @@ export default function CustomerDetailScreen() {
       const done = item.status === "Completed";
       const [isExpanded, setIsExpanded] = useState(false);
       const expandAnim = useRef(new Animated.Value(0)).current;
+      const livePayoff = useMemo(
+        () =>
+          calculatePayoff({
+            principal: item.amount,
+            createdAt: item.created_at,
+            dueDate: item.due_date,
+            interestEnabled: item.interest_enabled === 1,
+            interestRate: item.interest_rate || 0,
+            overdueInterestRate: item.overdue_interest_rate ?? null,
+            interestType: item.interest_type,
+            completedAt: null,
+          }),
+        [
+          item.amount,
+          item.created_at,
+          item.due_date,
+          item.interest_enabled,
+          item.interest_rate,
+          item.overdue_interest_rate,
+          item.interest_type,
+        ],
+      );
 
       const toggle = () => {
         const toValue = isExpanded ? 0 : 1;
@@ -475,7 +517,7 @@ export default function CustomerDetailScreen() {
                 </Text>
                 {!done && (
                   <Text className="text-base font-black text-emerald-500">
-                    ₱{item.amount.toFixed(2)}
+                    ₱{livePayoff.payoffTotal.toFixed(2)}
                   </Text>
                 )}
               </View>
@@ -548,6 +590,7 @@ export default function CustomerDetailScreen() {
       );
     },
   );
+  LendCard.displayName = "LendCard";
 
   const renderLend = useCallback(
     ({ item }: any) => (
@@ -558,7 +601,7 @@ export default function CustomerDetailScreen() {
         onDelete={openDeleteModal}
       />
     ),
-    [paymentsMap, openSheet, openDeleteModal],
+    [LendCard, paymentsMap, openDeleteModal, openSheet],
   );
 
   return (
@@ -787,7 +830,6 @@ export default function CustomerDetailScreen() {
           </Animated.View>
           <Animated.View
             ref={modalRef}
-            onLayout={(e) => setPaymentModalHeight(e.nativeEvent.layout.height)}
             style={{
               transform: [
                 { translateY: paymentSlideAnim },

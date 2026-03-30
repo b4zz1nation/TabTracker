@@ -16,6 +16,7 @@ export interface Lend {
   amount: number;
   interest_enabled: number;
   interest_rate: number;
+  overdue_interest_rate?: number | null;
   interest_type: "Daily" | "Monthly" | "Yearly" | null;
   status: "Ongoing" | "Completed";
   description?: string | null;
@@ -53,6 +54,7 @@ export function useLends() {
       interestEnabled: boolean = false,
       interestRate: number = 0,
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
+      overdueInterestRate: number | null = null,
       description: string | null = null,
       dueDate: string | null = null,
       remindersEnabled: boolean = true,
@@ -60,13 +62,14 @@ export function useLends() {
       const now = new Date().toISOString();
       const referenceCode = await createUniqueReferenceForKind(db, "lend");
       await db.runAsync(
-        "INSERT INTO lends (reference_code, customer_id, amount, interest_enabled, interest_rate, interest_type, description, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO lends (reference_code, customer_id, amount, interest_enabled, interest_rate, overdue_interest_rate, interest_type, description, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           referenceCode,
           customerId,
           amount,
           interestEnabled ? 1 : 0,
           interestRate,
+          overdueInterestRate,
           interestType,
           description,
           dueDate,
@@ -86,16 +89,18 @@ export function useLends() {
       interestEnabled: boolean = false,
       interestRate: number = 0,
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
+      overdueInterestRate: number | null = null,
       description: string | null = null,
       dueDate: string | null = null,
       remindersEnabled: boolean = true,
     ) => {
       await db.runAsync(
-        "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, description = ?, due_date = ?, reminders_enabled = ? WHERE id = ?",
+        "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, overdue_interest_rate = ?, interest_type = ?, description = ?, due_date = ?, reminders_enabled = ? WHERE id = ?",
         [
           amount,
           interestEnabled ? 1 : 0,
           interestRate,
+          overdueInterestRate,
           interestType,
           description,
           dueDate,

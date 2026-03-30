@@ -9,6 +9,40 @@ import { useCreditors } from "@/hooks/use-creditors";
 import { calculatePayoff } from "@/services/payoff";
 import { getReferenceLabel } from "@/services/reference";
 
+function formatDateLabel(dateString?: string | null) {
+  if (!dateString) return "Not set";
+  const date = new Date(dateString);
+  if (Number.isNaN(date.getTime())) return "Not set";
+  return date.toLocaleDateString();
+}
+
+function getDueStatusLabel(
+  dueDate?: string | null,
+  referenceDate?: string | null,
+) {
+  if (!dueDate) return "No deadline";
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) return "No deadline";
+
+  const reference = referenceDate ? new Date(referenceDate) : new Date();
+  if (Number.isNaN(reference.getTime())) return "No deadline";
+
+  const refStart = new Date(
+    reference.getFullYear(),
+    reference.getMonth(),
+    reference.getDate(),
+  );
+  const dueStart = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const diffDays = Math.floor(
+    (dueStart.getTime() - refStart.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  if (diffDays > 0) return `Due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
+  if (diffDays < 0)
+    return `Past due by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"}`;
+  return "Due today";
+}
+
 export default function MyTabDetailsScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
@@ -43,11 +77,16 @@ export default function MyTabDetailsScreen() {
       (sum, payment) => sum + payment.amount,
       0,
     );
+    const principalForCalculation = creditor.completed_at
+      ? creditor.balance + totalPaid
+      : creditor.balance;
     const payoff = calculatePayoff({
-      principal: creditor.balance,
+      principal: principalForCalculation,
       createdAt: creditor.created_at,
+      dueDate: creditor.due_date,
       interestEnabled: creditor.interest_enabled === 1,
       interestRate: creditor.interest_rate || 0,
+      overdueInterestRate: creditor.overdue_interest_rate ?? null,
       interestType: creditor.interest_type,
       completedAt: creditor.completed_at,
     });
@@ -60,6 +99,11 @@ export default function MyTabDetailsScreen() {
       totalPaid,
     };
   }, [creditor, payments]);
+  const baseRate = creditor?.interest_enabled ? creditor.interest_rate || 0 : 0;
+  const overdueRate =
+    creditor?.interest_enabled && (creditor.overdue_interest_rate ?? 0) > 0
+      ? creditor.overdue_interest_rate!
+      : null;
 
   if (!creditor || !stats) {
     return (
@@ -126,7 +170,7 @@ export default function MyTabDetailsScreen() {
           <View className="flex-row justify-between">
             <View>
               <Text className="text-gray-400 dark:text-gray-500 font-medium">
-                Agreement
+                Base Rate
               </Text>
               <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
                 {creditor.interest_enabled
@@ -135,7 +179,48 @@ export default function MyTabDetailsScreen() {
               </Text>
             </View>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">
-              {creditor.interest_enabled ? `${creditor.interest_rate}%` : "0%"}
+              {creditor.interest_enabled ? `${baseRate}%` : "0%"}
+            </Text>
+          </View>
+
+          <View className="flex-row justify-between">
+            <View>
+              <Text className="text-gray-400 dark:text-gray-500 font-medium">
+                After Due Rate
+              </Text>
+              <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                Applies only after due date
+              </Text>
+            </View>
+            <Text className="text-gray-900 dark:text-gray-100 font-bold">
+              {creditor.interest_enabled
+                ? overdueRate !== null
+                  ? `${overdueRate}%`
+                  : "Same as base"
+                : "N/A"}
+            </Text>
+          </View>
+
+          <View className="flex-row justify-between">
+            <View>
+              <Text className="text-gray-400 dark:text-gray-500 font-medium">
+                Due Date
+              </Text>
+              <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                Deadline
+              </Text>
+            </View>
+            <Text className="text-gray-900 dark:text-gray-100 font-bold">
+              {formatDateLabel(creditor.due_date)}
+            </Text>
+          </View>
+
+          <View className="flex-row justify-between">
+            <Text className="text-gray-400 dark:text-gray-500 font-medium">
+              Due Status
+            </Text>
+            <Text className="text-gray-900 dark:text-gray-100 font-bold">
+              {getDueStatusLabel(creditor.due_date, creditor.completed_at)}
             </Text>
           </View>
 
@@ -190,7 +275,7 @@ export default function MyTabDetailsScreen() {
               Description
             </Text>
             <Text className="text-xs text-gray-700 dark:text-gray-300 leading-relaxed italic">
-              "{creditor.description}"
+              {`"${creditor.description}"`}
             </Text>
           </View>
         ) : null}

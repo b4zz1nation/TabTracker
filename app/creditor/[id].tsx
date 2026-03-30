@@ -54,6 +54,28 @@ function EntryCard({
   const done = (entry.balance || 0) <= 0;
   const [isExpanded, setIsExpanded] = useState(false);
   const expandAnim = useRef(new Animated.Value(0)).current;
+  const livePayoff = useMemo(
+    () =>
+      calculatePayoff({
+        principal: entry.balance || 0,
+        createdAt: entry.created_at,
+        dueDate: entry.due_date,
+        interestEnabled: entry.interest_enabled === 1,
+        interestRate: entry.interest_rate || 0,
+        overdueInterestRate: entry.overdue_interest_rate ?? null,
+        interestType: entry.interest_type,
+        completedAt: null,
+      }),
+    [
+      entry.balance,
+      entry.created_at,
+      entry.due_date,
+      entry.interest_enabled,
+      entry.interest_rate,
+      entry.overdue_interest_rate,
+      entry.interest_type,
+    ],
+  );
   const originalPrincipal =
     (entry.balance || 0) +
     payments.reduce((sum, payment) => sum + payment.amount, 0);
@@ -91,7 +113,7 @@ function EntryCard({
             </Text>
             {!done && (
               <Text className="text-base font-black text-orange-500">
-                PHP {(entry.balance || 0).toFixed(2)}
+                PHP {livePayoff.payoffTotal.toFixed(2)}
               </Text>
             )}
           </View>
@@ -176,7 +198,6 @@ export default function CreditorDetailScreen() {
     refresh: refreshCreditors,
     getPayments,
     addPayment,
-    completeCreditor,
   } = useCreditors();
   const [paymentsByCreditor, setPaymentsByCreditor] = useState<
     Record<number, CreditorPayment[]>
@@ -221,7 +242,22 @@ export default function CreditorDetailScreen() {
   const groupedEntries = creditorGroup?.entries ?? [];
   const displayEntries = groupedEntries;
   const totalOutstanding = useMemo(
-    () => displayEntries.reduce((sum, entry) => sum + (entry.balance || 0), 0),
+    () =>
+      displayEntries.reduce(
+        (sum, entry) =>
+          sum +
+          calculatePayoff({
+            principal: entry.balance || 0,
+            createdAt: entry.created_at,
+            dueDate: entry.due_date,
+            interestEnabled: entry.interest_enabled === 1,
+            interestRate: entry.interest_rate || 0,
+            overdueInterestRate: entry.overdue_interest_rate ?? null,
+            interestType: entry.interest_type,
+            completedAt: null,
+          }).payoffTotal,
+        0,
+      ),
     [displayEntries],
   );
 
@@ -420,8 +456,10 @@ export default function CreditorDetailScreen() {
     const payoff = calculatePayoff({
       principal: selectedCreditor.balance || 0,
       createdAt: selectedCreditor.created_at,
+      dueDate: selectedCreditor.due_date,
       interestEnabled: selectedCreditor.interest_enabled === 1,
       interestRate: selectedCreditor.interest_rate || 0,
+      overdueInterestRate: selectedCreditor.overdue_interest_rate ?? null,
       interestType: selectedCreditor.interest_type,
       completedAt: selectedCreditor.completed_at,
     });
@@ -457,10 +495,20 @@ export default function CreditorDetailScreen() {
 
   const handleConfirmComplete = useCallback(async () => {
     if (!selectedCreditor) return;
-    await completeCreditor(selectedCreditor.id);
+    const payoff = calculatePayoff({
+      principal: selectedCreditor.balance || 0,
+      createdAt: selectedCreditor.created_at,
+      dueDate: selectedCreditor.due_date,
+      interestEnabled: selectedCreditor.interest_enabled === 1,
+      interestRate: selectedCreditor.interest_rate || 0,
+      overdueInterestRate: selectedCreditor.overdue_interest_rate ?? null,
+      interestType: selectedCreditor.interest_type,
+      completedAt: selectedCreditor.completed_at,
+    });
+    await addPayment(selectedCreditor.id, payoff.payoffTotal);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     closeSheet(() => refreshCreditors());
-  }, [closeSheet, completeCreditor, refreshCreditors, selectedCreditor]);
+  }, [addPayment, closeSheet, refreshCreditors, selectedCreditor]);
 
   const handleConfirmPayment = useCallback(async () => {
     if (!selectedCreditor) return;

@@ -27,10 +27,47 @@ type LogGroup = {
   latestDate: string;
   initialPrincipal: number;
   totalPaid: number;
+  interestSummary: string;
+  dueSummary: string;
   accentColor: string;
   ctaColor: string;
   activities: Activity[];
 };
+
+function getInterestSummary(
+  enabled: number,
+  baseRate: number,
+  frequency: string | null,
+  overdueRate?: number | null,
+) {
+  if (enabled !== 1) return "No interest";
+  const base =
+    baseRate > 0
+      ? `${baseRate}% / ${frequency ?? "Monthly"}`
+      : "After-due only";
+  if ((overdueRate ?? 0) > 0) {
+    return `${base} -> ${overdueRate}% after due`;
+  }
+  return base;
+}
+
+function getDueSummary(dueDate?: string | null) {
+  if (!dueDate) return "No due date";
+  const due = new Date(dueDate);
+  if (Number.isNaN(due.getTime())) return "No due date";
+
+  const now = new Date();
+  const nowStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueStart = new Date(due.getFullYear(), due.getMonth(), due.getDate());
+  const diffDays = Math.floor(
+    (dueStart.getTime() - nowStart.getTime()) / (1000 * 60 * 60 * 24),
+  );
+
+  if (diffDays > 0) return `Due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
+  if (diffDays < 0)
+    return `Past due by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"}`;
+  return "Due today";
+}
 
 const ActivityRow = React.memo(({ act }: { act: Activity }) => {
   const getIcon = (type: Activity["type"]) => {
@@ -202,6 +239,14 @@ const LogCard = React.memo(({ group }: { group: LogGroup }) => {
               </Text>
             </View>
           </View>
+          <View className="mt-3 gap-1">
+            <Text className="text-[10px] text-gray-500 dark:text-gray-400 font-bold">
+              {group.interestSummary}
+            </Text>
+            <Text className="text-[10px] text-gray-500 dark:text-gray-400 font-bold">
+              {group.dueSummary}
+            </Text>
+          </View>
         </View>
 
         <Animated.View
@@ -328,6 +373,13 @@ export default function LogsScreen() {
         latestDate,
         totalPaid: totalPayments,
         initialPrincipal,
+        interestSummary: getInterestSummary(
+          lend.interest_enabled,
+          lend.interest_rate || 0,
+          lend.interest_type,
+          lend.overdue_interest_rate ?? null,
+        ),
+        dueSummary: getDueSummary(lend.due_date),
         accentColor: "#38bdf8",
         ctaColor: "#0ea5e9",
         activities: activities.sort(
@@ -391,6 +443,13 @@ export default function LogsScreen() {
         latestDate,
         totalPaid: totalPayments,
         initialPrincipal,
+        interestSummary: getInterestSummary(
+          creditor.interest_enabled,
+          creditor.interest_rate || 0,
+          creditor.interest_type,
+          creditor.overdue_interest_rate ?? null,
+        ),
+        dueSummary: getDueSummary(creditor.due_date),
         accentColor: "#f97316",
         ctaColor: "#f97316",
         activities: activities.sort(

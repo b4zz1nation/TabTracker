@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   TextInput,
   Pressable,
@@ -20,7 +20,18 @@ import { useCustomers } from "@/hooks/use-customers";
 import { useLends } from "@/hooks/use-lends";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import ScreenContainer from "@/components/screen-container";
+import { calculatePayoff } from "@/services/payoff";
 import { createUniqueReferenceForKind } from "@/services/reference";
+
+const NativeDateTimePicker = (() => {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    return require("@react-native-community/datetimepicker")
+      .default as React.ComponentType<any>;
+  } catch {
+    return null;
+  }
+})();
 
 function formatStoredDate(dateString?: string | null) {
   if (!dateString) return "";
@@ -53,6 +64,54 @@ function parseDateInputToIso(dateInput: string) {
   return parsed.toISOString();
 }
 
+function parseDateInputToDate(dateInput: string) {
+  if (!dateInput.trim()) return null;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateInput)) return null;
+
+  const [yearText, monthText, dayText] = dateInput.split("-");
+  const year = Number(yearText);
+  const month = Number(monthText);
+  const day = Number(dayText);
+  const parsed = new Date(year, month - 1, day);
+
+  if (
+    parsed.getFullYear() !== year ||
+    parsed.getMonth() !== month - 1 ||
+    parsed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function formatDateToInput(date: Date) {
+  const year = date.getFullYear();
+  const month = `${date.getMonth() + 1}`.padStart(2, "0");
+  const day = `${date.getDate()}`.padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getPastDueDays(dateInput: string) {
+  const parsed = parseDateInputToDate(dateInput);
+  if (!parsed) return 0;
+
+  const today = new Date();
+  const todayStart = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+  const dueStart = new Date(
+    parsed.getFullYear(),
+    parsed.getMonth(),
+    parsed.getDate(),
+  );
+  const diff = todayStart.getTime() - dueStart.getTime();
+  if (diff <= 0) return 0;
+  return Math.floor(diff / (1000 * 60 * 60 * 24));
+}
+
 export default function AddLendScreen() {
   const router = useRouter();
   const { customer_id, customer_name, lend_id } = useLocalSearchParams<{
@@ -66,15 +125,24 @@ export default function AddLendScreen() {
   const db = useSQLiteContext();
   const { refresh: refreshCustomers } = useCustomers();
   const { refresh: refreshLends, lends } = useLends();
+  const existingLend = useMemo(
+    () => lends.find((lend) => lend.id === Number(lend_id)) ?? null,
+    [lend_id, lends],
+  );
 
   const [amount, setAmount] = useState("");
   const [interestEnabled, setInterestEnabled] = useState(false);
   const [interestRate, setInterestRate] = useState("");
+  const [overdueInterestRate, setOverdueInterestRate] = useState("");
   const [interestType, setInterestType] = useState<
     "Daily" | "Monthly" | "Yearly" | null
   >(null);
   const [description, setDescription] = useState("");
   const [dueDateInput, setDueDateInput] = useState("");
+  const [showDueDatePicker, setShowDueDatePicker] = useState(false);
+  const [dueDatePickerValue, setDueDatePickerValue] = useState<Date>(
+    new Date(),
+  );
   const [remindersEnabled, setRemindersEnabled] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const scrollViewRef = useRef<any>(null);
@@ -86,7 +154,53 @@ export default function AddLendScreen() {
   const [errorVisible, setErrorVisible] = useState(false);
   const [dueDateError, setDueDateError] = useState(false);
   const [interestRateError, setInterestRateError] = useState(false);
+  const [overdueInterestRateError, setOverdueInterestRateError] =
+    useState(false);
   const [interestFrequencyError, setInterestFrequencyError] = useState(false);
+  const parsedDueDate = useMemo(
+    () => parseDateInputToIso(dueDateInput),
+    [dueDateInput],
+  );
+  const pastDueDays = useMemo(
+    () => getPastDueDays(dueDateInput),
+    [dueDateInput],
+  );
+  const canConfigureOverdueInterest = useMemo(
+    () => !!parsedDueDate,
+    [parsedDueDate],
+  );
+  const interestPreview = useMemo(() => {
+    const principal = parseFloat(amount);
+    const baseRate = parseFloat(interestRate);
+    const overdueRate = parseFloat(overdueInterestRate);
+    if (!interestEnabled || !interestType || !Number.isFinite(principal)) {
+      return null;
+    }
+    if (!Number.isFinite(baseRate) || baseRate <= 0 || principal <= 0) {
+      return null;
+    }
+
+    const payoff = calculatePayoff({
+      principal,
+      createdAt: existingLend?.created_at ?? new Date().toISOString(),
+      dueDate: parsedDueDate,
+      interestEnabled: true,
+      interestRate: baseRate,
+      overdueInterestRate:
+        Number.isFinite(overdueRate) && overdueRate > 0 ? overdueRate : null,
+      interestType,
+      completedAt: null,
+    });
+    return payoff;
+  }, [
+    amount,
+    existingLend?.created_at,
+    interestEnabled,
+    interestRate,
+    overdueInterestRate,
+    interestType,
+    parsedDueDate,
+  ]);
 
   const handleToggleInterest = (val: boolean) => {
     setInterestEnabled(val);
@@ -95,7 +209,12 @@ export default function AddLendScreen() {
         interestInputRef.current?.focus();
       }, 100);
     } else {
+      setInterestRate("");
+      setOverdueInterestRate("");
       setInterestType(null);
+      setInterestRateError(false);
+      setOverdueInterestRateError(false);
+      setInterestFrequencyError(false);
     }
   };
 
@@ -108,14 +227,62 @@ export default function AddLendScreen() {
     setErrorVisible(false);
   };
 
-  const handleDueDateChange = (text: string) => {
+  const handleDueDateChange = (date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getDate()}`.padStart(2, "0");
+    setDueDateInput(`${year}-${month}-${day}`);
+    setDueDateError(false);
+  };
+
+  const handleDueDateTextChange = (text: string) => {
     setDueDateInput(text.replace(/[^0-9-]/g, "").slice(0, 10));
     setDueDateError(false);
+  };
+
+  const openDueDatePicker = () => {
+    const parsedDate = parseDateInputToDate(dueDateInput);
+    setDueDatePickerValue(parsedDate ?? new Date());
+    setShowDueDatePicker(true);
+  };
+
+  const applyQuickDueDate = (daysFromToday: number) => {
+    const base = new Date();
+    base.setHours(0, 0, 0, 0);
+    base.setDate(base.getDate() + daysFromToday);
+    setDueDatePickerValue(base);
+    setDueDateInput(formatDateToInput(base));
+    setDueDateError(false);
+  };
+
+  const clearDueDate = () => {
+    setDueDateInput("");
+    setDueDateError(false);
+    setRemindersEnabled(true);
+  };
+
+  const onDueDatePickerChange = (event: any, selectedDate?: Date) => {
+    if (Platform.OS === "android") {
+      setShowDueDatePicker(false);
+    }
+
+    if (event.type !== "set" || !selectedDate) {
+      return;
+    }
+
+    setDueDatePickerValue(selectedDate);
+    handleDueDateChange(selectedDate);
   };
 
   const handleRateChange = (text: string) => {
     setInterestRate(text.replace(/[^0-9.]/g, "").replace(/(\..*)\./, "$1"));
     setInterestRateError(false);
+  };
+  const handleOverdueRateChange = (text: string) => {
+    setOverdueInterestRate(
+      text.replace(/[^0-9.]/g, "").replace(/(\..*)\./, "$1"),
+    );
+    setOverdueInterestRateError(false);
   };
 
   useEffect(() => {
@@ -125,9 +292,14 @@ export default function AddLendScreen() {
         setAmount(lend.amount.toString());
         setInterestEnabled(lend.interest_enabled === 1);
         setInterestRate(lend.interest_rate?.toString() || "");
+        setOverdueInterestRate(lend.overdue_interest_rate?.toString() || "");
         setInterestType(lend.interest_type || null);
         setDescription(lend.description || "");
         setDueDateInput(formatStoredDate(lend.due_date));
+        const parsedDate = parseDateInputToDate(
+          formatStoredDate(lend.due_date),
+        );
+        setDueDatePickerValue(parsedDate ?? new Date());
         setRemindersEnabled((lend.reminders_enabled ?? 1) === 1);
       }
     }
@@ -170,7 +342,7 @@ export default function AddLendScreen() {
 
   const handleSave = async () => {
     const numAmount = parseFloat(amount);
-    const dueDate = parseDateInputToIso(dueDateInput);
+    const dueDate = parsedDueDate;
     if (isNaN(numAmount) || numAmount <= 0) {
       setErrorVisible(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -185,28 +357,72 @@ export default function AddLendScreen() {
 
     if (interestEnabled) {
       const numRate = parseFloat(interestRate);
-      if (isNaN(numRate) || numRate <= 0) {
-        setInterestRateError(true);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
-        return;
-      }
-
       if (!interestType) {
         setInterestFrequencyError(true);
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
         return;
       }
+      const numOverdueRate = parseFloat(overdueInterestRate);
+      const hasBaseRate = Number.isFinite(numRate) && numRate > 0;
+      const hasOverdueRate =
+        overdueInterestRate.trim() !== "" &&
+        Number.isFinite(numOverdueRate) &&
+        numOverdueRate > 0;
+      if (!hasBaseRate && !hasOverdueRate) {
+        setInterestRateError(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+      if (overdueInterestRate.trim() !== "" && !hasOverdueRate) {
+        setOverdueInterestRateError(true);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        return;
+      }
+      if (hasOverdueRate) {
+        if (!parsedDueDate) {
+          setOverdueInterestRateError(true);
+          Alert.alert(
+            "Overdue Interest Locked",
+            "Set a due date to configure overdue interest.",
+          );
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          return;
+        }
+        if (hasBaseRate && numOverdueRate <= numRate) {
+          setOverdueInterestRateError(true);
+          Alert.alert(
+            "Invalid Overdue Rate",
+            "Overdue interest rate must be higher than the base interest rate.",
+          );
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+          return;
+        }
+      }
     }
 
     try {
       setIsSaving(true);
+      const parsedBaseRate = parseFloat(interestRate);
+      const parsedOverdueRate = parseFloat(overdueInterestRate);
+      const normalizedOverdueRate =
+        interestEnabled &&
+        Number.isFinite(parsedOverdueRate) &&
+        parsedOverdueRate > 0
+          ? parsedOverdueRate
+          : null;
+
       if (isEditing) {
         await db.runAsync(
-          "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, interest_type = ?, description = ?, due_date = ?, reminders_enabled = ? WHERE id = ?",
+          "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, overdue_interest_rate = ?, interest_type = ?, description = ?, due_date = ?, reminders_enabled = ? WHERE id = ?",
           [
             numAmount,
             interestEnabled ? 1 : 0,
-            parseFloat(interestRate),
+            interestEnabled &&
+            Number.isFinite(parsedBaseRate) &&
+            parsedBaseRate > 0
+              ? parsedBaseRate
+              : 0,
+            normalizedOverdueRate,
             interestType,
             description || null,
             dueDate,
@@ -217,14 +433,19 @@ export default function AddLendScreen() {
       } else {
         const referenceCode = await createUniqueReferenceForKind(db, "lend");
         await db.runAsync(
-          "INSERT INTO lends (reference_code, customer_id, amount, status, interest_enabled, interest_rate, interest_type, description, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO lends (reference_code, customer_id, amount, status, interest_enabled, interest_rate, overdue_interest_rate, interest_type, description, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             referenceCode,
             Number(customer_id),
             numAmount,
             "Ongoing",
             interestEnabled ? 1 : 0,
-            parseFloat(interestRate),
+            interestEnabled &&
+            Number.isFinite(parsedBaseRate) &&
+            parsedBaseRate > 0
+              ? parsedBaseRate
+              : 0,
+            normalizedOverdueRate,
             interestType,
             description || null,
             dueDate,
@@ -369,22 +590,59 @@ export default function AddLendScreen() {
               </Text>
             )}
           </View>
-          <View
-            className={`bg-white dark:bg-gray-900 rounded-2xl border ${
-              dueDateError
-                ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
-                : "border-gray-200 dark:border-gray-800"
-            } px-4 shadow-sm`}
-          >
-            <TextInput
-              className="h-16 text-lg font-bold text-gray-900 dark:text-gray-100"
-              placeholder="YYYY-MM-DD"
-              placeholderTextColor="#9ca3af"
-              value={dueDateInput}
-              onChangeText={handleDueDateChange}
-              keyboardType="numbers-and-punctuation"
-            />
-          </View>
+          {NativeDateTimePicker ? (
+            <>
+              <Pressable
+                onPress={openDueDatePicker}
+                className={`h-16 bg-white dark:bg-gray-900 rounded-2xl border ${
+                  dueDateError
+                    ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
+                    : "border-gray-200 dark:border-gray-800"
+                } px-4 shadow-sm flex-row items-center justify-between`}
+              >
+                <Text
+                  className={`text-lg font-bold ${
+                    dueDateInput
+                      ? "text-gray-900 dark:text-gray-100"
+                      : "text-gray-400 dark:text-gray-500"
+                  }`}
+                >
+                  {dueDateInput || "YYYY-MM-DD"}
+                </Text>
+                <Ionicons name="calendar-outline" size={20} color="#9ca3af" />
+              </Pressable>
+              {showDueDatePicker && (
+                <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
+                  <NativeDateTimePicker
+                    value={dueDatePickerValue}
+                    mode="date"
+                    display={Platform.OS === "ios" ? "spinner" : "default"}
+                    onChange={onDueDatePickerChange}
+                  />
+                  {Platform.OS === "ios" && (
+                    <View className="flex-row justify-end gap-3 px-2 pb-2">
+                      <Pressable onPress={() => setShowDueDatePicker(false)}>
+                        <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                          Done
+                        </Text>
+                      </Pressable>
+                    </View>
+                  )}
+                </View>
+              )}
+            </>
+          ) : (
+            <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
+              <TextInput
+                className="h-14 text-lg font-bold text-gray-900 dark:text-gray-100 px-3"
+                placeholder="YYYY-MM-DD"
+                placeholderTextColor="#9ca3af"
+                value={dueDateInput}
+                onChangeText={handleDueDateTextChange}
+                keyboardType="numbers-and-punctuation"
+              />
+            </View>
+          )}
         </View>
 
         <View className="mb-8 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">
@@ -394,23 +652,68 @@ export default function AddLendScreen() {
                 Due reminders
               </Text>
               <Text className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                {parseDateInputToIso(dueDateInput)
+                {parsedDueDate
                   ? "3 days before, 1 day before, due day, and overdue reminders"
                   : "Add a due date first"}
               </Text>
             </View>
             <Switch
-              value={remindersEnabled && !!parseDateInputToIso(dueDateInput)}
+              value={remindersEnabled && !!parsedDueDate}
               onValueChange={setRemindersEnabled}
               trackColor={{ false: "#e5e7eb", true: "#bae6fd" }}
               thumbColor={
-                remindersEnabled && !!parseDateInputToIso(dueDateInput)
-                  ? "#0ea5e9"
-                  : "#f3f4f6"
+                remindersEnabled && !!parsedDueDate ? "#0ea5e9" : "#f3f4f6"
               }
-              disabled={!parseDateInputToIso(dueDateInput)}
+              disabled={!parsedDueDate}
             />
           </View>
+        </View>
+        <View className="mb-8 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 px-4 py-3 shadow-sm">
+          <View className="flex-row flex-wrap gap-2">
+            <Pressable
+              className="px-3 py-2 rounded-xl bg-sky-50 dark:bg-sky-900/30"
+              onPress={() => applyQuickDueDate(0)}
+            >
+              <Text className="text-xs font-bold text-sky-600 dark:text-sky-400">
+                Today
+              </Text>
+            </Pressable>
+            <Pressable
+              className="px-3 py-2 rounded-xl bg-sky-50 dark:bg-sky-900/30"
+              onPress={() => applyQuickDueDate(7)}
+            >
+              <Text className="text-xs font-bold text-sky-600 dark:text-sky-400">
+                +7 days
+              </Text>
+            </Pressable>
+            <Pressable
+              className="px-3 py-2 rounded-xl bg-sky-50 dark:bg-sky-900/30"
+              onPress={() => applyQuickDueDate(30)}
+            >
+              <Text className="text-xs font-bold text-sky-600 dark:text-sky-400">
+                +30 days
+              </Text>
+            </Pressable>
+            <Pressable
+              className="px-3 py-2 rounded-xl bg-gray-100 dark:bg-gray-800"
+              onPress={clearDueDate}
+            >
+              <Text className="text-xs font-bold text-gray-500 dark:text-gray-400">
+                Clear
+              </Text>
+            </Pressable>
+          </View>
+          {pastDueDays > 0 && (
+            <Text className="mt-3 text-xs font-semibold text-amber-600 dark:text-amber-400">
+              Past due by {pastDueDays} day{pastDueDays === 1 ? "" : "s"}.
+            </Text>
+          )}
+          {interestPreview && (
+            <Text className="mt-2 text-xs font-semibold text-emerald-600 dark:text-emerald-400">
+              Accrued interest now: PHP{" "}
+              {interestPreview.accruedInterest.toFixed(2)}
+            </Text>
+          )}
         </View>
 
         <View className="mb-8">
@@ -461,7 +764,6 @@ export default function AddLendScreen() {
               disabled={!amount.trim()}
             />
           </View>
-
           {interestEnabled && (
             <View className="gap-6">
               <View>
@@ -489,6 +791,7 @@ export default function AddLendScreen() {
                     }}
                     onFocus={(event) => handleFocus(event.target, 300)}
                     keyboardType="numeric"
+                    editable={interestEnabled}
                   />
                   <Text className="text-xl font-bold text-gray-400 dark:text-gray-500 ml-2">
                     %
@@ -515,6 +818,7 @@ export default function AddLendScreen() {
                         setInterestType(type);
                         setInterestFrequencyError(false);
                       }}
+                      disabled={false}
                       className={`flex-1 py-3 items-center rounded-xl border ${interestType === type ? "bg-sky-50 border-sky-200 dark:bg-sky-900/40 dark:border-sky-700" : interestFrequencyError ? "border-red-500 bg-red-50/50 dark:bg-red-950/20" : "bg-transparent border-gray-100 dark:border-gray-800 dark:bg-gray-800"}`}
                     >
                       <Text
@@ -526,6 +830,39 @@ export default function AddLendScreen() {
                   ))}
                 </View>
               </View>
+              {canConfigureOverdueInterest && (
+                <View>
+                  <View className="flex-row items-center justify-between mb-2 ml-1">
+                    <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                      Overdue Interest Rate
+                    </Text>
+                    {overdueInterestRateError && (
+                      <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                        Must be greater than base rate
+                      </Text>
+                    )}
+                  </View>
+                  <View
+                    className={`flex-row items-center bg-white dark:bg-gray-900 rounded-2xl border ${overdueInterestRateError ? "border-red-500 bg-red-50/50 dark:bg-red-950/20" : "border-gray-200 dark:border-gray-800"} px-4 shadow-sm`}
+                  >
+                    <TextInput
+                      className="flex-1 h-14 text-2xl font-bold text-gray-900 dark:text-gray-100"
+                      placeholder="Optional"
+                      placeholderTextColor="#9ca3af"
+                      value={overdueInterestRate}
+                      onChangeText={handleOverdueRateChange}
+                      onFocus={(event) => handleFocus(event.target, 320)}
+                      keyboardType="numeric"
+                    />
+                    <Text className="text-xl font-bold text-gray-400 dark:text-gray-500 ml-2">
+                      %
+                    </Text>
+                  </View>
+                  <Text className="mt-2 text-[11px] text-gray-400 dark:text-gray-500">
+                    Applies only after due date. Leave blank to keep same rate.
+                  </Text>
+                </View>
+              )}
             </View>
           )}
         </View>
