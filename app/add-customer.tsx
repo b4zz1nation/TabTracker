@@ -299,6 +299,23 @@ export default function AddCustomerScreen() {
     scrollViewRef.current?.scrollToPosition?.(0, targetY, true);
   }, []);
 
+  const handleInterestFieldFocus = useCallback(
+    (reactNode: any, extraHeight?: number) => {
+      scrollInterestSectionToTop();
+      setTimeout(() => {
+        handleFocus(reactNode, extraHeight);
+      }, 60);
+    },
+    [handleFocus, scrollInterestSectionToTop],
+  );
+
+  const handleOverdueInterestFocus = useCallback(
+    (reactNode: any, extraHeight?: number) => {
+      handleInterestFieldFocus(reactNode, extraHeight);
+    },
+    [handleInterestFieldFocus],
+  );
+
   const handleAmountChange = (text: string) => {
     const sanitized = text.replace(/[^0-9.]/g, "").replace(/(\..*)\./, "$1");
     setAmount(sanitized);
@@ -1237,7 +1254,12 @@ export default function AddCustomerScreen() {
           </View>
         )}
 
-        <View className="mb-0 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">
+        <View
+          className="mb-0 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md"
+          onLayout={(event) => {
+            interestSectionY.current = event.nativeEvent.layout.y;
+          }}
+        >
           <View className="flex-row items-center justify-between mb-6">
             <View className="flex-row items-center">
               <View
@@ -1265,9 +1287,6 @@ export default function AddCustomerScreen() {
           </View>
           <View
             className={`gap-6 ${interestEnabled && name.trim() && amount.trim() ? "opacity-100" : "opacity-45"}`}
-            onLayout={(event) => {
-              interestSectionY.current = event.nativeEvent.layout.y;
-            }}
           >
             <View>
               <View className="flex-row items-center justify-between mb-2 ml-1">
@@ -1294,7 +1313,7 @@ export default function AddCustomerScreen() {
                     setErrors((prev) => ({ ...prev, interest: false }));
                   }}
                   onFocus={(event) =>
-                    handleFocus(event.target, interestFocusOffset + 140)
+                    handleFocus(event.target, interestFocusOffset + 80)
                   }
                   keyboardType="numeric"
                   editable={
@@ -1360,7 +1379,10 @@ export default function AddCustomerScreen() {
                       setErrors((prev) => ({ ...prev, interest: false }));
                     }}
                     onFocus={(event) =>
-                      handleFocus(event.target, interestFocusOffset + 180)
+                      handleOverdueInterestFocus(
+                        event.target,
+                        interestFocusOffset + 180,
+                      )
                     }
                     keyboardType="numeric"
                   />

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   TextInput,
   Pressable,
@@ -10,6 +10,7 @@ import {
   Animated,
   Keyboard,
   Platform,
+  findNodeHandle,
 } from "react-native";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { Ionicons } from "@expo/vector-icons";
@@ -147,6 +148,7 @@ export default function AddLendScreen() {
   const [isSaving, setIsSaving] = useState(false);
   const scrollViewRef = useRef<any>(null);
   const interestInputRef = useRef<TextInput>(null);
+  const interestSectionY = useRef(0);
   const footerTranslateY = useRef(new Animated.Value(0)).current;
   const keyboardVerticalOffset = Platform.OS === "ios" ? 40 : 20;
   const keyboardFooterGap = 18;
@@ -202,25 +204,57 @@ export default function AddLendScreen() {
     parsedDueDate,
   ]);
 
-  const handleToggleInterest = (val: boolean) => {
-    setInterestEnabled(val);
-    if (val) {
-      setTimeout(() => {
-        interestInputRef.current?.focus();
-      }, 100);
-    } else {
-      setInterestRate("");
-      setOverdueInterestRate("");
-      setInterestType(null);
-      setInterestRateError(false);
-      setOverdueInterestRateError(false);
-      setInterestFrequencyError(false);
-    }
-  };
+  const handleFocus = useCallback((reactNode: any, extraHeight?: number) => {
+    const resolvedNode =
+      typeof reactNode === "number" ? reactNode : findNodeHandle(reactNode);
+    if (!resolvedNode) return;
 
-  const handleFocus = (reactNode: any, extraHeight?: number) => {
-    scrollViewRef.current?.scrollToFocusedInput(reactNode, extraHeight);
-  };
+    requestAnimationFrame(() => {
+      scrollViewRef.current?.scrollToFocusedInput(resolvedNode, extraHeight);
+    });
+  }, []);
+
+  const scrollInterestSectionToTop = useCallback(() => {
+    const targetY = Math.max(0, interestSectionY.current - 48);
+    scrollViewRef.current?.scrollToPosition?.(0, targetY, true);
+  }, []);
+
+  const handleInterestFieldFocus = useCallback(
+    (reactNode: any, extraHeight?: number) => {
+      scrollInterestSectionToTop();
+      setTimeout(() => {
+        handleFocus(reactNode, extraHeight);
+      }, 60);
+    },
+    [handleFocus, scrollInterestSectionToTop],
+  );
+
+  const handleOverdueInterestFocus = useCallback(
+    (reactNode: any, extraHeight?: number) => {
+      handleInterestFieldFocus(reactNode, extraHeight);
+    },
+    [handleInterestFieldFocus],
+  );
+
+  const handleToggleInterest = useCallback(
+    (val: boolean) => {
+      setInterestEnabled(val);
+      if (val) {
+        setTimeout(() => {
+          scrollInterestSectionToTop();
+          interestInputRef.current?.focus();
+        }, 100);
+      } else {
+        setInterestRate("");
+        setOverdueInterestRate("");
+        setInterestType(null);
+        setInterestRateError(false);
+        setOverdueInterestRateError(false);
+        setInterestFrequencyError(false);
+      }
+    },
+    [scrollInterestSectionToTop],
+  );
 
   const handleAmountChange = (text: string) => {
     setAmount(text.replace(/[^0-9.]/g, "").replace(/(\..*)\./, "$1"));
@@ -738,7 +772,12 @@ export default function AddLendScreen() {
           </View>
         </View>
 
-        <View className="mb-0 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">
+        <View
+          className="mb-0 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md"
+          onLayout={(event) => {
+            interestSectionY.current = event.nativeEvent.layout.y;
+          }}
+        >
           <View className="flex-row items-center justify-between mb-6">
             <View className="flex-row items-center">
               <View
@@ -789,7 +828,7 @@ export default function AddLendScreen() {
                     onChangeText={(t) => {
                       handleRateChange(t);
                     }}
-                    onFocus={(event) => handleFocus(event.target, 300)}
+                    onFocus={(event) => handleFocus(event.target, 220)}
                     keyboardType="numeric"
                     editable={interestEnabled}
                   />
@@ -851,7 +890,9 @@ export default function AddLendScreen() {
                       placeholderTextColor="#9ca3af"
                       value={overdueInterestRate}
                       onChangeText={handleOverdueRateChange}
-                      onFocus={(event) => handleFocus(event.target, 320)}
+                      onFocus={(event) =>
+                        handleOverdueInterestFocus(event.target, 320)
+                      }
                       keyboardType="numeric"
                     />
                     <Text className="text-xl font-bold text-gray-400 dark:text-gray-500 ml-2">

@@ -467,6 +467,23 @@ export default function MyTabModalScreen() {
     scrollViewRef.current?.scrollToPosition?.(0, targetY, true);
   }, []);
 
+  const handleInterestFieldFocus = useCallback(
+    (reactNode: any, extraHeight?: number) => {
+      scrollInterestSectionToTop();
+      setTimeout(() => {
+        handleFocus(reactNode, extraHeight);
+      }, 60);
+    },
+    [handleFocus, scrollInterestSectionToTop],
+  );
+
+  const handleOverdueInterestFocus = useCallback(
+    (reactNode: any, extraHeight?: number) => {
+      handleInterestFieldFocus(reactNode, extraHeight);
+    },
+    [handleInterestFieldFocus],
+  );
+
   const handleToggleInterest = useCallback(
     (val: boolean) => {
       setInterestEnabled(val);
@@ -1296,7 +1313,12 @@ export default function MyTabModalScreen() {
           </View>
         </View>
 
-        <View className="mb-0 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">
+        <View
+          className="mb-0 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md"
+          onLayout={(event) => {
+            interestSectionY.current = event.nativeEvent.layout.y;
+          }}
+        >
           <View className="flex-row items-center justify-between mb-6">
             <View className="flex-row items-center">
               <View
@@ -1358,7 +1380,7 @@ export default function MyTabModalScreen() {
                     value={interestRate}
                     onChangeText={sanitizeRate}
                     onFocus={(event) =>
-                      handleFocus(event.target, interestFocusOffset)
+                      handleFocus(event.target, interestFocusOffset - 60)
                     }
                     keyboardType="numeric"
                     editable={interestEnabled}
@@ -1429,7 +1451,10 @@ export default function MyTabModalScreen() {
                       value={overdueInterestRate}
                       onChangeText={sanitizeOverdueRate}
                       onFocus={(event) =>
-                        handleFocus(event.target, interestFocusOffset + 160)
+                        handleOverdueInterestFocus(
+                          event.target,
+                          interestFocusOffset + 160,
+                        )
                       }
                       keyboardType="numeric"
                     />
