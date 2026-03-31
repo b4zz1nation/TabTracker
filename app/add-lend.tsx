@@ -680,8 +680,8 @@ export default function AddLendScreen() {
         </View>
 
         <View className="mb-8 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">
-          <View className="flex-row items-center justify-between">
-            <View>
+          <View className="flex-row items-start gap-3">
+            <View className="flex-1 pr-2">
               <Text className="text-base font-bold text-gray-900 dark:text-gray-100">
                 Due reminders
               </Text>
@@ -691,15 +691,17 @@ export default function AddLendScreen() {
                   : "Add a due date first"}
               </Text>
             </View>
-            <Switch
-              value={remindersEnabled && !!parsedDueDate}
-              onValueChange={setRemindersEnabled}
-              trackColor={{ false: "#e5e7eb", true: "#bae6fd" }}
-              thumbColor={
-                remindersEnabled && !!parsedDueDate ? "#0ea5e9" : "#f3f4f6"
-              }
-              disabled={!parsedDueDate}
-            />
+            <View className="pt-0.5">
+              <Switch
+                value={remindersEnabled && !!parsedDueDate}
+                onValueChange={setRemindersEnabled}
+                trackColor={{ false: "#e5e7eb", true: "#bae6fd" }}
+                thumbColor={
+                  remindersEnabled && !!parsedDueDate ? "#0ea5e9" : "#f3f4f6"
+                }
+                disabled={!parsedDueDate}
+              />
+            </View>
           </View>
         </View>
         <View className="mb-8 rounded-2xl bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 px-4 py-3 shadow-sm">

@@ -2,8 +2,8 @@ import React, { useEffect, useState } from "react";
 import {
   Animated,
   Keyboard,
-  Platform,
   Pressable,
+  Platform,
   StyleSheet,
   View,
   LayoutChangeEvent,
@@ -45,39 +45,33 @@ export default function ScreenContainer({
   extraHeight = 140,
 }: ScreenContainerProps) {
   const insets = useSafeAreaInsets();
-  const [keyboardInset, setKeyboardInset] = useState(0);
   const [footerHeight, setFooterHeight] = useState(0);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
 
   const footerSpacing = footer
-    ? footerHeight + keyboardInset + 16
+    ? keyboardVisible
+      ? 16
+      : footerHeight + 16
     : 30 + insets.bottom;
 
   useEffect(() => {
-    if (!footer) {
-      setKeyboardInset(0);
-      return;
-    }
-
     const showEvent =
       Platform.OS === "ios" ? "keyboardWillShow" : "keyboardDidShow";
     const hideEvent =
       Platform.OS === "ios" ? "keyboardWillHide" : "keyboardDidHide";
 
-    const showSub = Keyboard.addListener(showEvent, (event) => {
-      setKeyboardInset(
-        Math.max(0, event.endCoordinates.height - insets.bottom),
-      );
+    const showSub = Keyboard.addListener(showEvent, () => {
+      setKeyboardVisible(true);
     });
-
     const hideSub = Keyboard.addListener(hideEvent, () => {
-      setKeyboardInset(0);
+      setKeyboardVisible(false);
     });
 
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, [footer, insets.bottom]);
+  }, []);
 
   const handleFooterLayout = (event: LayoutChangeEvent) => {
     setFooterHeight(event.nativeEvent.layout.height);
@@ -112,11 +106,11 @@ export default function ScreenContainer({
             enableOnAndroid={true}
             enableAutomaticScroll={true}
             extraHeight={extraHeight}
-            extraScrollHeight={footer ? footerHeight + 16 : 0}
-            enableResetScrollToCoords={false}
-            keyboardDismissMode={
-              Platform.OS === "ios" ? "interactive" : "on-drag"
+            extraScrollHeight={
+              footer && !keyboardVisible ? footerHeight + 16 : 0
             }
+            enableResetScrollToCoords={false}
+            keyboardDismissMode="none"
             showsVerticalScrollIndicator={false}
             bounces={true}
           >
