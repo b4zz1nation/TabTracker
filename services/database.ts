@@ -5,7 +5,7 @@ import {
 } from "@/services/reference";
 
 export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
-  const DATABASE_VERSION = 14;
+  const DATABASE_VERSION = 15;
   let result = await db.getFirstAsync<{ user_version: number }>(
     "PRAGMA user_version",
   );
@@ -450,6 +450,40 @@ export async function migrateDbIfNeeded(db: SQLite.SQLiteDatabase) {
     }
 
     currentDbVersion = 14;
+  }
+
+  if (currentDbVersion < 15) {
+    const lendColumns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(lends)",
+    );
+    const lendColumnNames = new Set(lendColumns.map((col) => col.name));
+
+    if (!lendColumnNames.has("start_date")) {
+      await db.execAsync(
+        "ALTER TABLE lends ADD COLUMN start_date DATETIME DEFAULT NULL;",
+      );
+    }
+
+    await db.execAsync(
+      "UPDATE lends SET start_date = COALESCE(start_date, created_at) WHERE start_date IS NULL;",
+    );
+
+    const creditorColumns = await db.getAllAsync<{ name: string }>(
+      "PRAGMA table_info(creditors)",
+    );
+    const creditorColumnNames = new Set(creditorColumns.map((col) => col.name));
+
+    if (!creditorColumnNames.has("start_date")) {
+      await db.execAsync(
+        "ALTER TABLE creditors ADD COLUMN start_date DATETIME DEFAULT NULL;",
+      );
+    }
+
+    await db.execAsync(
+      "UPDATE creditors SET start_date = COALESCE(start_date, created_at) WHERE start_date IS NULL;",
+    );
+
+    currentDbVersion = 15;
   }
 
   await db.execAsync(`PRAGMA user_version = ${DATABASE_VERSION}`);

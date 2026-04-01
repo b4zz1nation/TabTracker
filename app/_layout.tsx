@@ -3,7 +3,9 @@ import {
   DefaultTheme,
   ThemeProvider,
 } from "@react-navigation/native";
+import * as NavigationBar from "expo-navigation-bar";
 import * as Notifications from "expo-notifications";
+import * as SystemUI from "expo-system-ui";
 import { Stack } from "expo-router";
 import { SQLiteProvider, useSQLiteContext } from "expo-sqlite";
 import { StatusBar } from "expo-status-bar";
@@ -12,6 +14,7 @@ import React, {
   Suspense,
   useCallback,
   useEffect,
+  useLayoutEffect,
   useRef,
 } from "react";
 import {
@@ -30,6 +33,7 @@ import {
   NotificationsProvider,
   useNotifications,
 } from "@/contexts/notifications-context";
+import { ThemeProvider as AppThemeProvider } from "@/contexts/theme-context";
 import { useColorScheme } from "@/hooks/use-color-scheme";
 import { migrateDbIfNeeded } from "@/services/database";
 import {
@@ -157,12 +161,36 @@ function NotificationBootstrap({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-export default function RootLayout() {
+function RootLayoutContent() {
   const colorScheme = useColorScheme();
   const markProfileReady = useCallback(() => {}, []);
+  const backgroundColor = colorScheme === "dark" ? "#151718" : "#ffffff";
+
+  useLayoutEffect(() => {
+    const applySystemTheme = async () => {
+      const isDark = colorScheme === "dark";
+
+      if (Platform.OS !== "android") {
+        try {
+          await SystemUI.setBackgroundColorAsync(backgroundColor);
+        } catch (error) {
+          console.error("Failed to update system background color:", error);
+        }
+        return;
+      }
+
+      try {
+        await NavigationBar.setButtonStyleAsync(isDark ? "light" : "dark");
+      } catch (error) {
+        console.error("Failed to update Android navigation bar:", error);
+      }
+    };
+
+    applySystemTheme();
+  }, [backgroundColor, colorScheme]);
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, backgroundColor }}>
       <AuthContext.Provider value={{ markProfileReady }}>
         <DatabaseErrorBoundary>
           <Suspense
@@ -172,6 +200,7 @@ export default function RootLayout() {
                   flex: 1,
                   alignItems: "center",
                   justifyContent: "center",
+                  backgroundColor,
                 }}
               >
                 <ActivityIndicator size="large" color="#0ea5e9" />
@@ -227,7 +256,11 @@ export default function RootLayout() {
                         <Stack.Screen name="relationships" />
                       </Stack>
                     </SheetProvider>
-                    <StatusBar style="auto" />
+                    <StatusBar
+                      animated={false}
+                      backgroundColor={backgroundColor}
+                      style={colorScheme === "dark" ? "light" : "dark"}
+                    />
                   </ThemeProvider>
                 </NotificationBootstrap>
               </NotificationsProvider>
@@ -236,5 +269,13 @@ export default function RootLayout() {
         </DatabaseErrorBoundary>
       </AuthContext.Provider>
     </GestureHandlerRootView>
+  );
+}
+
+export default function RootLayout() {
+  return (
+    <AppThemeProvider>
+      <RootLayoutContent />
+    </AppThemeProvider>
   );
 }

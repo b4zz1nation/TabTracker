@@ -129,6 +129,7 @@ const CreditorCard = React.memo(
             calculatePayoff({
               principal: entry.balance || 0,
               createdAt: entry.created_at,
+              startAt: entry.start_date ?? entry.created_at,
               dueDate: entry.due_date,
               interestEnabled: entry.interest_enabled === 1,
               interestRate: entry.interest_rate || 0,
@@ -324,6 +325,7 @@ export default function HomeScreen() {
           calculatePayoff({
             principal: lend.amount,
             createdAt: lend.created_at,
+            startAt: lend.start_date ?? lend.created_at,
             dueDate: lend.due_date,
             interestEnabled: lend.interest_enabled === 1,
             interestRate: lend.interest_rate || 0,
@@ -363,6 +365,7 @@ export default function HomeScreen() {
             calculatePayoff({
               principal: lend.amount,
               createdAt: lend.created_at,
+              startAt: lend.start_date ?? lend.created_at,
               dueDate: lend.due_date,
               interestEnabled: lend.interest_enabled === 1,
               interestRate: lend.interest_rate || 0,
@@ -384,6 +387,7 @@ export default function HomeScreen() {
             calculatePayoff({
               principal: creditor.balance || 0,
               createdAt: creditor.created_at,
+              startAt: creditor.start_date ?? creditor.created_at,
               dueDate: creditor.due_date,
               interestEnabled: creditor.interest_enabled === 1,
               interestRate: creditor.interest_rate || 0,

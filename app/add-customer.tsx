@@ -167,6 +167,14 @@ export default function AddCustomerScreen() {
     "Daily" | "Monthly" | "Yearly"
   >("Monthly");
   const [description, setDescription] = useState("");
+  const [startDateInput, setStartDateInput] = useState(
+    formatDateToInput(new Date()),
+  );
+  const [startDateError, setStartDateError] = useState(false);
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [startDatePickerValue, setStartDatePickerValue] = useState<Date>(
+    new Date(),
+  );
   const [dueDateInput, setDueDateInput] = useState("");
   const [dueDateError, setDueDateError] = useState(false);
   const [showDueDatePicker, setShowDueDatePicker] = useState(false);
@@ -203,6 +211,10 @@ export default function AddCustomerScreen() {
         : null,
     [lendId, lends],
   );
+  const parsedStartDate = useMemo(
+    () => parseDateInputToIso(startDateInput),
+    [startDateInput],
+  );
   const parsedDueDate = useMemo(
     () => parseDateInputToIso(dueDateInput),
     [dueDateInput],
@@ -229,6 +241,11 @@ export default function AddCustomerScreen() {
     return calculatePayoff({
       principal,
       createdAt: existingLend?.created_at ?? new Date().toISOString(),
+      startAt:
+        parsedStartDate ??
+        existingLend?.start_date ??
+        existingLend?.created_at ??
+        new Date().toISOString(),
       dueDate: parsedDueDate,
       interestEnabled: true,
       interestRate: baseRate,
@@ -240,10 +257,12 @@ export default function AddCustomerScreen() {
   }, [
     amount,
     existingLend?.created_at,
+    existingLend?.start_date,
     interestEnabled,
     interestRate,
     overdueInterestRate,
     interestType,
+    parsedStartDate,
     parsedDueDate,
   ]);
 
@@ -330,6 +349,14 @@ export default function AddCustomerScreen() {
     );
   };
 
+  const setStartDateFromPicker = useCallback((date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getDate()}`.padStart(2, "0");
+    setStartDateInput(`${year}-${month}-${day}`);
+    setStartDateError(false);
+  }, []);
+
   const setDueDateFromPicker = useCallback((date: Date) => {
     const year = date.getFullYear();
     const month = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -337,6 +364,12 @@ export default function AddCustomerScreen() {
     setDueDateInput(`${year}-${month}-${day}`);
     setDueDateError(false);
   }, []);
+
+  const openStartDatePicker = useCallback(() => {
+    const parsedDate = parseDateInputToDate(startDateInput);
+    setStartDatePickerValue(parsedDate ?? new Date());
+    setShowStartDatePicker(true);
+  }, [startDateInput]);
 
   const openDueDatePicker = useCallback(() => {
     const parsedDate = parseDateInputToDate(dueDateInput);
@@ -359,10 +392,31 @@ export default function AddCustomerScreen() {
     setRemindersEnabled(true);
   }, []);
 
+  const handleStartDateTextChange = useCallback((text: string) => {
+    setStartDateInput(text.replace(/[^0-9-]/g, "").slice(0, 10));
+    setStartDateError(false);
+  }, []);
+
   const handleDueDateTextChange = useCallback((text: string) => {
     setDueDateInput(text.replace(/[^0-9-]/g, "").slice(0, 10));
     setDueDateError(false);
   }, []);
+
+  const onStartDatePickerChange = useCallback(
+    (event: any, selectedDate?: Date) => {
+      if (Platform.OS === "android") {
+        setShowStartDatePicker(false);
+      }
+
+      if (event.type !== "set" || !selectedDate) {
+        return;
+      }
+
+      setStartDatePickerValue(selectedDate);
+      setStartDateFromPicker(selectedDate);
+    },
+    [setStartDateFromPicker],
+  );
 
   const onDueDatePickerChange = useCallback(
     (event: any, selectedDate?: Date) => {
@@ -391,6 +445,12 @@ export default function AddCustomerScreen() {
         setInterestType(lend.interest_type || "Monthly");
         setDates({ start: lend.created_at, end: lend.completed_at });
         setDescription(lend.description || "");
+        setStartDateInput(formatStoredDate(lend.start_date ?? lend.created_at));
+        setStartDatePickerValue(
+          parseDateInputToDate(
+            formatStoredDate(lend.start_date ?? lend.created_at),
+          ) ?? new Date(),
+        );
         setDueDateInput(formatStoredDate(lend.due_date));
         setDueDatePickerValue(
           parseDateInputToDate(formatStoredDate(lend.due_date)) ?? new Date(),
@@ -468,6 +528,7 @@ export default function AddCustomerScreen() {
 
     const trimmedName = name.trim();
     const numAmount = parseFloat(amount);
+    const startDate = parsedStartDate;
     const dueDate = parsedDueDate;
 
     const errs: { name?: boolean; amount?: boolean } = {};
@@ -480,7 +541,22 @@ export default function AddCustomerScreen() {
       return;
     }
 
+    if (!startDateInput.trim() || !startDate) {
+      setStartDateError(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
     if (dueDateInput.trim() && !dueDate) {
+      setDueDateError(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    if (
+      dueDate &&
+      new Date(startDate).getTime() > new Date(dueDate).getTime()
+    ) {
       setDueDateError(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
@@ -549,7 +625,7 @@ export default function AddCustomerScreen() {
           : null;
       if (isEditing) {
         await db.runAsync(
-          "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, overdue_interest_rate = ?, interest_type = ?, description = ?, due_date = ?, reminders_enabled = ? WHERE id = ?",
+          "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, overdue_interest_rate = ?, interest_type = ?, description = ?, start_date = ?, due_date = ?, reminders_enabled = ? WHERE id = ?",
           [
             numAmount,
             interestEnabled ? 1 : 0,
@@ -561,6 +637,7 @@ export default function AddCustomerScreen() {
             normalizedOverdueRate,
             interestType,
             description || null,
+            startDate,
             dueDate,
             dueDate ? (remindersEnabled ? 1 : 0) : 0,
             Number(lendId),
@@ -569,7 +646,7 @@ export default function AddCustomerScreen() {
       } else if (customerId) {
         const referenceCode = await createUniqueReferenceForKind(db, "lend");
         await db.runAsync(
-          "INSERT INTO lends (reference_code, customer_id, amount, status, interest_enabled, interest_rate, overdue_interest_rate, interest_type, description, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO lends (reference_code, customer_id, amount, status, interest_enabled, interest_rate, overdue_interest_rate, interest_type, description, start_date, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             referenceCode,
             Number(customerId),
@@ -584,6 +661,7 @@ export default function AddCustomerScreen() {
             normalizedOverdueRate,
             interestType,
             description || null,
+            startDate,
             dueDate,
             dueDate ? (remindersEnabled ? 1 : 0) : 0,
             new Date().toISOString(),
@@ -597,7 +675,7 @@ export default function AddCustomerScreen() {
         const newCustomerId = result.lastInsertRowId;
         const referenceCode = await createUniqueReferenceForKind(db, "lend");
         await db.runAsync(
-          "INSERT INTO lends (reference_code, customer_id, amount, status, interest_enabled, interest_rate, overdue_interest_rate, interest_type, description, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO lends (reference_code, customer_id, amount, status, interest_enabled, interest_rate, overdue_interest_rate, interest_type, description, start_date, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             referenceCode,
             newCustomerId,
@@ -612,6 +690,7 @@ export default function AddCustomerScreen() {
             normalizedOverdueRate,
             interestType,
             description || null,
+            startDate,
             dueDate,
             dueDate ? (remindersEnabled ? 1 : 0) : 0,
             new Date().toISOString(),
@@ -755,6 +834,7 @@ export default function AddCustomerScreen() {
       ? calculatePayoff({
           principal: receiptPrincipalForCalculation,
           createdAt: receiptLend.created_at,
+          startAt: receiptLend.start_date ?? receiptLend.created_at,
           dueDate: receiptLend.due_date,
           interestEnabled: receiptLend.interest_enabled === 1,
           interestRate: receiptLend.interest_rate || 0,
@@ -1086,69 +1166,149 @@ export default function AddCustomerScreen() {
 
         {!isReadOnly && (
           <View className="mb-6">
-            <View className="flex-row items-center justify-between mb-2 ml-1">
-              <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
-                Due Date (Optional)
-              </Text>
-              {dueDateError && (
-                <Text className="text-[10px] text-red-500 font-semibold mr-1">
-                  Invalid date
-                </Text>
-              )}
-            </View>
-            {NativeDateTimePicker ? (
-              <>
-                <Pressable
-                  onPress={openDueDatePicker}
-                  className={`h-16 bg-white dark:bg-gray-900 rounded-2xl border ${
-                    dueDateError
-                      ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
-                      : "border-gray-200 dark:border-gray-800"
-                  } px-4 shadow-sm flex-row items-center justify-between`}
-                >
-                  <Text
-                    className={`text-lg font-bold ${
-                      dueDateInput
-                        ? "text-gray-900 dark:text-gray-100"
-                        : "text-gray-400 dark:text-gray-500"
-                    }`}
-                  >
-                    {dueDateInput || "YYYY-MM-DD"}
+            <View className="flex-row gap-3">
+              <View className="flex-1">
+                <View className="flex-row items-center justify-between mb-2 ml-1">
+                  <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                    Start Date
                   </Text>
-                  <Ionicons name="calendar-outline" size={20} color="#9ca3af" />
-                </Pressable>
-                {showDueDatePicker && (
-                  <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
-                    <NativeDateTimePicker
-                      value={dueDatePickerValue}
-                      mode="date"
-                      display={Platform.OS === "ios" ? "spinner" : "default"}
-                      onChange={onDueDatePickerChange}
-                    />
-                    {Platform.OS === "ios" && (
-                      <View className="flex-row justify-end gap-3 px-2 pb-2">
-                        <Pressable onPress={() => setShowDueDatePicker(false)}>
-                          <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
-                            Done
-                          </Text>
-                        </Pressable>
+                  {startDateError && (
+                    <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                      Required
+                    </Text>
+                  )}
+                </View>
+                {NativeDateTimePicker ? (
+                  <>
+                    <Pressable
+                      onPress={openStartDatePicker}
+                      className={`h-16 bg-white dark:bg-gray-900 rounded-2xl border ${
+                        startDateError
+                          ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
+                          : "border-gray-200 dark:border-gray-800"
+                      } px-4 shadow-sm flex-row items-center justify-between`}
+                    >
+                      <Text className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                        {startDateInput}
+                      </Text>
+                      <Ionicons
+                        name="calendar-outline"
+                        size={20}
+                        color="#9ca3af"
+                      />
+                    </Pressable>
+                    {showStartDatePicker && (
+                      <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
+                        <NativeDateTimePicker
+                          value={startDatePickerValue}
+                          mode="date"
+                          display={
+                            Platform.OS === "ios" ? "spinner" : "default"
+                          }
+                          onChange={onStartDatePickerChange}
+                        />
+                        {Platform.OS === "ios" && (
+                          <View className="flex-row justify-end gap-3 px-2 pb-2">
+                            <Pressable
+                              onPress={() => setShowStartDatePicker(false)}
+                            >
+                              <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                                Done
+                              </Text>
+                            </Pressable>
+                          </View>
+                        )}
                       </View>
                     )}
+                  </>
+                ) : (
+                  <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
+                    <TextInput
+                      className="h-14 text-lg font-bold text-gray-900 dark:text-gray-100 px-3"
+                      placeholder="YYYY-MM-DD"
+                      placeholderTextColor="#9ca3af"
+                      value={startDateInput}
+                      onChangeText={handleStartDateTextChange}
+                      keyboardType="numbers-and-punctuation"
+                    />
                   </View>
                 )}
-              </>
-            ) : (
-              <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
-                <TextInput
-                  className="h-14 text-lg font-bold text-gray-900 dark:text-gray-100 px-3"
-                  placeholder="YYYY-MM-DD"
-                  placeholderTextColor="#9ca3af"
-                  value={dueDateInput}
-                  onChangeText={handleDueDateTextChange}
-                  keyboardType="numbers-and-punctuation"
-                />
               </View>
-            )}
+
+              <View className="flex-1">
+                <View className="flex-row items-center justify-between mb-2 ml-1">
+                  <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                    Due Date
+                  </Text>
+                  {dueDateError && (
+                    <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                      Invalid
+                    </Text>
+                  )}
+                </View>
+                {NativeDateTimePicker ? (
+                  <>
+                    <Pressable
+                      onPress={openDueDatePicker}
+                      className={`h-16 bg-white dark:bg-gray-900 rounded-2xl border ${
+                        dueDateError
+                          ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
+                          : "border-gray-200 dark:border-gray-800"
+                      } px-4 shadow-sm flex-row items-center justify-between`}
+                    >
+                      <Text
+                        className={`text-lg font-bold ${
+                          dueDateInput
+                            ? "text-gray-900 dark:text-gray-100"
+                            : "text-gray-400 dark:text-gray-500"
+                        }`}
+                      >
+                        {dueDateInput || "Optional"}
+                      </Text>
+                      <Ionicons
+                        name="calendar-outline"
+                        size={20}
+                        color="#9ca3af"
+                      />
+                    </Pressable>
+                    {showDueDatePicker && (
+                      <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
+                        <NativeDateTimePicker
+                          value={dueDatePickerValue}
+                          mode="date"
+                          display={
+                            Platform.OS === "ios" ? "spinner" : "default"
+                          }
+                          onChange={onDueDatePickerChange}
+                        />
+                        {Platform.OS === "ios" && (
+                          <View className="flex-row justify-end gap-3 px-2 pb-2">
+                            <Pressable
+                              onPress={() => setShowDueDatePicker(false)}
+                            >
+                              <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                                Done
+                              </Text>
+                            </Pressable>
+                          </View>
+                        )}
+                      </View>
+                    )}
+                  </>
+                ) : (
+                  <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
+                    <TextInput
+                      className="h-14 text-lg font-bold text-gray-900 dark:text-gray-100 px-3"
+                      placeholder="Optional"
+                      placeholderTextColor="#9ca3af"
+                      value={dueDateInput}
+                      onChangeText={handleDueDateTextChange}
+                      keyboardType="numbers-and-punctuation"
+                    />
+                  </View>
+                )}
+              </View>
+            </View>
           </View>
         )}
 

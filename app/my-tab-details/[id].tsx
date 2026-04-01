@@ -83,6 +83,7 @@ export default function MyTabDetailsScreen() {
     const payoff = calculatePayoff({
       principal: principalForCalculation,
       createdAt: creditor.created_at,
+      startAt: creditor.start_date ?? creditor.created_at,
       dueDate: creditor.due_date,
       interestEnabled: creditor.interest_enabled === 1,
       interestRate: creditor.interest_rate || 0,
@@ -164,6 +165,20 @@ export default function MyTabDetailsScreen() {
             </Text>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">
               PHP {creditor.balance.toFixed(2)}
+            </Text>
+          </View>
+
+          <View className="flex-row justify-between">
+            <View>
+              <Text className="text-gray-400 dark:text-gray-500 font-medium">
+                Start Date
+              </Text>
+              <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                Interest begins from here
+              </Text>
+            </View>
+            <Text className="text-gray-900 dark:text-gray-100 font-bold">
+              {formatDateLabel(creditor.start_date ?? creditor.created_at)}
             </Text>
           </View>
 
@@ -282,7 +297,7 @@ export default function MyTabDetailsScreen() {
 
         <View className="mt-4 gap-2">
           <Text className="text-[9px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">
-            Started {new Date(creditor.created_at).toLocaleString()}
+            Recorded {new Date(creditor.created_at).toLocaleString()}
           </Text>
           {creditor.completed_at ? (
             <Text className="text-[9px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">

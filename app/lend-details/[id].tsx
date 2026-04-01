@@ -79,6 +79,7 @@ export default function LendDetailsScreen() {
     const payoff = calculatePayoff({
       principal: principalForCalculation,
       createdAt: lend.created_at,
+      startAt: lend.start_date ?? lend.created_at,
       dueDate: lend.due_date,
       interestEnabled: lend.interest_enabled === 1,
       interestRate: lend.interest_rate || 0,
@@ -170,6 +171,20 @@ export default function LendDetailsScreen() {
             </Text>
             <Text className="text-gray-900 dark:text-gray-100 font-bold">
               PHP {lend.amount.toFixed(2)}
+            </Text>
+          </View>
+
+          <View className="flex-row justify-between">
+            <View>
+              <Text className="text-gray-400 dark:text-gray-500 font-medium">
+                Start Date
+              </Text>
+              <Text className="text-[10px] text-gray-400 dark:text-gray-500 mt-0.5">
+                Interest begins from here
+              </Text>
+            </View>
+            <Text className="text-gray-900 dark:text-gray-100 font-bold">
+              {formatDateLabel(lend.start_date ?? lend.created_at)}
             </Text>
           </View>
 
@@ -290,7 +305,7 @@ export default function LendDetailsScreen() {
 
         <View className="mt-4 gap-2">
           <Text className="text-[9px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">
-            Started {new Date(lend.created_at).toLocaleString()}
+            Recorded {new Date(lend.created_at).toLocaleString()}
           </Text>
           {lend.completed_at ? (
             <Text className="text-[9px] text-gray-400 dark:text-gray-500 text-center uppercase tracking-widest leading-relaxed">

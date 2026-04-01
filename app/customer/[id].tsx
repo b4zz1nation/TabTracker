@@ -306,6 +306,7 @@ export default function CustomerDetailScreen() {
           calculatePayoff({
             principal: lend.amount,
             createdAt: lend.created_at,
+            startAt: lend.start_date ?? lend.created_at,
             dueDate: lend.due_date,
             interestEnabled: lend.interest_enabled === 1,
             interestRate: lend.interest_rate || 0,
@@ -352,6 +353,7 @@ export default function CustomerDetailScreen() {
     const payoff = calculatePayoff({
       principal: l.amount,
       createdAt: l.created_at,
+      startAt: l.start_date ?? l.created_at,
       dueDate: l.due_date,
       interestEnabled: l.interest_enabled === 1,
       interestRate: l.interest_rate || 0,
@@ -411,6 +413,7 @@ export default function CustomerDetailScreen() {
     const payoff = calculatePayoff({
       principal: selectedLend.amount,
       createdAt: selectedLend.created_at,
+      startAt: selectedLend.start_date ?? selectedLend.created_at,
       dueDate: selectedLend.due_date,
       interestEnabled: selectedLend.interest_enabled === 1,
       interestRate: selectedLend.interest_rate || 0,
@@ -449,6 +452,7 @@ export default function CustomerDetailScreen() {
           calculatePayoff({
             principal: item.amount,
             createdAt: item.created_at,
+            startAt: item.start_date ?? item.created_at,
             dueDate: item.due_date,
             interestEnabled: item.interest_enabled === 1,
             interestRate: item.interest_rate || 0,
@@ -531,7 +535,10 @@ export default function CustomerDetailScreen() {
             </View>
             <View className="flex-row justify-between items-center mt-4">
               <Text className="text-[10px] text-gray-400 font-bold uppercase">
-                Started {new Date(item.created_at).toLocaleDateString()}
+                Started{" "}
+                {new Date(
+                  item.start_date ?? item.created_at,
+                ).toLocaleDateString()}
               </Text>
               {!done && payments.length > 0 && (
                 <Pressable

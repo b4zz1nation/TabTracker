@@ -201,6 +201,19 @@ export default function MyTabModalScreen() {
   const [description, setDescription] = useState(
     existingCreditor?.description ?? "",
   );
+  const [startDateInput, setStartDateInput] = useState(
+    formatStoredDate(
+      existingCreditor?.start_date ?? existingCreditor?.created_at,
+    ) || formatDateToInput(new Date()),
+  );
+  const [showStartDatePicker, setShowStartDatePicker] = useState(false);
+  const [startDatePickerValue, setStartDatePickerValue] = useState<Date>(
+    parseDateInputToDate(
+      formatStoredDate(
+        existingCreditor?.start_date ?? existingCreditor?.created_at,
+      ),
+    ) ?? new Date(),
+  );
   const [dueDateInput, setDueDateInput] = useState(
     formatStoredDate(existingCreditor?.due_date),
   );
@@ -231,6 +244,7 @@ export default function MyTabModalScreen() {
   const [formError, setFormError] = useState<string | null>(null);
   const [nameFocused, setNameFocused] = useState(false);
   const [amountFocused, setAmountFocused] = useState(false);
+  const [startDateError, setStartDateError] = useState(false);
   const [dueDateError, setDueDateError] = useState(false);
   const [interestRateError, setInterestRateError] = useState(false);
   const [interestFrequencyError, setInterestFrequencyError] = useState(false);
@@ -240,6 +254,10 @@ export default function MyTabModalScreen() {
   >([]);
   const [isHistoryExpanded, setIsHistoryExpanded] = useState(false);
   const historyExpandAnim = useRef(new Animated.Value(0)).current;
+  const parsedStartDate = useMemo(
+    () => parseDateInputToIso(startDateInput),
+    [startDateInput],
+  );
   const parsedDueDate = useMemo(
     () => parseDateInputToIso(dueDateInput),
     [dueDateInput],
@@ -266,6 +284,11 @@ export default function MyTabModalScreen() {
     return calculatePayoff({
       principal,
       createdAt: existingCreditor?.created_at ?? new Date().toISOString(),
+      startAt:
+        parsedStartDate ??
+        existingCreditor?.start_date ??
+        existingCreditor?.created_at ??
+        new Date().toISOString(),
       dueDate: parsedDueDate,
       interestEnabled: true,
       interestRate: baseRate,
@@ -277,10 +300,12 @@ export default function MyTabModalScreen() {
   }, [
     balance,
     existingCreditor?.created_at,
+    existingCreditor?.start_date,
     interestEnabled,
     interestRate,
     overdueInterestRate,
     interestType,
+    parsedStartDate,
     parsedDueDate,
   ]);
 
@@ -295,6 +320,8 @@ export default function MyTabModalScreen() {
         setName("");
         setBalance("");
         setDescription("");
+        setStartDateInput(formatDateToInput(new Date()));
+        setStartDatePickerValue(new Date());
         setDueDateInput("");
         setDueDatePickerValue(new Date());
         setRemindersEnabled(true);
@@ -310,6 +337,22 @@ export default function MyTabModalScreen() {
     setBalance(isAddingToExisting ? "" : existingCreditor.balance.toString());
     setDescription(
       isAddingToExisting ? "" : (existingCreditor.description ?? ""),
+    );
+    setStartDateInput(
+      isAddingToExisting
+        ? formatDateToInput(new Date())
+        : formatStoredDate(
+            existingCreditor.start_date ?? existingCreditor.created_at,
+          ),
+    );
+    setStartDatePickerValue(
+      isAddingToExisting
+        ? new Date()
+        : (parseDateInputToDate(
+            formatStoredDate(
+              existingCreditor.start_date ?? existingCreditor.created_at,
+            ),
+          ) ?? new Date()),
     );
     setDueDateInput(
       isAddingToExisting ? "" : formatStoredDate(existingCreditor.due_date),
@@ -386,6 +429,14 @@ export default function MyTabModalScreen() {
     setBalance(text.replace(/[^0-9.]/g, "").replace(/(\..*)\./g, "$1"));
   }, []);
 
+  const setStartDateFromPicker = useCallback((date: Date) => {
+    const year = date.getFullYear();
+    const month = `${date.getMonth() + 1}`.padStart(2, "0");
+    const day = `${date.getDate()}`.padStart(2, "0");
+    setStartDateInput(`${year}-${month}-${day}`);
+    setStartDateError(false);
+  }, []);
+
   const setDueDateFromPicker = useCallback((date: Date) => {
     const year = date.getFullYear();
     const month = `${date.getMonth() + 1}`.padStart(2, "0");
@@ -393,6 +444,12 @@ export default function MyTabModalScreen() {
     setDueDateInput(`${year}-${month}-${day}`);
     setDueDateError(false);
   }, []);
+
+  const openStartDatePicker = useCallback(() => {
+    const parsedDate = parseDateInputToDate(startDateInput);
+    setStartDatePickerValue(parsedDate ?? new Date());
+    setShowStartDatePicker(true);
+  }, [startDateInput]);
 
   const openDueDatePicker = useCallback(() => {
     const parsedDate = parseDateInputToDate(dueDateInput);
@@ -415,10 +472,31 @@ export default function MyTabModalScreen() {
     setRemindersEnabled(true);
   }, []);
 
+  const handleStartDateTextChange = useCallback((text: string) => {
+    setStartDateInput(text.replace(/[^0-9-]/g, "").slice(0, 10));
+    setStartDateError(false);
+  }, []);
+
   const handleDueDateTextChange = useCallback((text: string) => {
     setDueDateInput(text.replace(/[^0-9-]/g, "").slice(0, 10));
     setDueDateError(false);
   }, []);
+
+  const onStartDatePickerChange = useCallback(
+    (event: any, selectedDate?: Date) => {
+      if (Platform.OS === "android") {
+        setShowStartDatePicker(false);
+      }
+
+      if (event.type !== "set" || !selectedDate) {
+        return;
+      }
+
+      setStartDatePickerValue(selectedDate);
+      setStartDateFromPicker(selectedDate);
+    },
+    [setStartDateFromPicker],
+  );
 
   const onDueDatePickerChange = useCallback(
     (event: any, selectedDate?: Date) => {
@@ -515,6 +593,7 @@ export default function MyTabModalScreen() {
       normalizedBalance === "" ? 0 : parseFloat(normalizedBalance);
     const nextBalance = Number.isFinite(parsedBalance) ? parsedBalance : 0;
     const trimmedDescription = description.trim();
+    const startDate = parsedStartDate;
     const dueDate = parsedDueDate;
 
     if (
@@ -525,7 +604,22 @@ export default function MyTabModalScreen() {
       return;
     }
 
+    if (!startDateInput.trim() || !startDate) {
+      setStartDateError(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
     if (dueDateInput.trim() && !dueDate) {
+      setDueDateError(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    if (
+      dueDate &&
+      new Date(startDate).getTime() > new Date(dueDate).getTime()
+    ) {
       setDueDateError(true);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
@@ -594,6 +688,7 @@ export default function MyTabModalScreen() {
           nextRate,
           nextType,
           nextOverdueRate,
+          startDate,
           dueDate,
           dueDate ? remindersEnabled : false,
           { allowDuplicateName: true },
@@ -608,6 +703,7 @@ export default function MyTabModalScreen() {
           nextRate,
           nextType,
           nextOverdueRate,
+          startDate,
           dueDate,
           dueDate ? remindersEnabled : false,
         );
@@ -620,6 +716,7 @@ export default function MyTabModalScreen() {
           nextRate,
           nextType,
           nextOverdueRate,
+          startDate,
           dueDate,
           dueDate ? remindersEnabled : false,
         );
@@ -787,6 +884,7 @@ export default function MyTabModalScreen() {
     const receiptPayoff = calculatePayoff({
       principal: receiptPrincipalForCalculation,
       createdAt: existingCreditor.created_at,
+      startAt: existingCreditor.start_date ?? existingCreditor.created_at,
       dueDate: existingCreditor.due_date,
       interestEnabled: existingCreditor.interest_enabled === 1,
       interestRate: existingCreditor.interest_rate || 0,
@@ -1153,69 +1251,145 @@ export default function MyTabModalScreen() {
         )}
 
         <View className="mb-8">
-          <View className="flex-row items-center justify-between mb-2 ml-1">
-            <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
-              Due Date (Optional)
-            </Text>
-            {dueDateError && (
-              <Text className="text-[10px] text-red-500 font-semibold mr-1">
-                Use YYYY-MM-DD
-              </Text>
-            )}
-          </View>
-          {NativeDateTimePicker ? (
-            <>
-              <Pressable
-                onPress={openDueDatePicker}
-                className={`h-16 bg-white dark:bg-gray-900 rounded-2xl border ${
-                  dueDateError
-                    ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
-                    : "border-gray-200 dark:border-gray-800"
-                } px-4 shadow-sm flex-row items-center justify-between`}
-              >
-                <Text
-                  className={`text-lg font-bold ${
-                    dueDateInput
-                      ? "text-gray-900 dark:text-gray-100"
-                      : "text-gray-400 dark:text-gray-500"
-                  }`}
-                >
-                  {dueDateInput || "YYYY-MM-DD"}
+          <View className="flex-row gap-3">
+            <View className="flex-1">
+              <View className="flex-row items-center justify-between mb-2 ml-1">
+                <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                  Start Date
                 </Text>
-                <Ionicons name="calendar-outline" size={20} color="#9ca3af" />
-              </Pressable>
-              {showDueDatePicker && (
-                <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
-                  <NativeDateTimePicker
-                    value={dueDatePickerValue}
-                    mode="date"
-                    display={Platform.OS === "ios" ? "spinner" : "default"}
-                    onChange={onDueDatePickerChange}
-                  />
-                  {Platform.OS === "ios" && (
-                    <View className="flex-row justify-end gap-3 px-2 pb-2">
-                      <Pressable onPress={() => setShowDueDatePicker(false)}>
-                        <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
-                          Done
-                        </Text>
-                      </Pressable>
+                {startDateError && (
+                  <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                    Required
+                  </Text>
+                )}
+              </View>
+              {NativeDateTimePicker ? (
+                <>
+                  <Pressable
+                    onPress={openStartDatePicker}
+                    className={`h-16 bg-white dark:bg-gray-900 rounded-2xl border ${
+                      startDateError
+                        ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
+                        : "border-gray-200 dark:border-gray-800"
+                    } px-4 shadow-sm flex-row items-center justify-between`}
+                  >
+                    <Text className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                      {startDateInput}
+                    </Text>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={20}
+                      color="#9ca3af"
+                    />
+                  </Pressable>
+                  {showStartDatePicker && (
+                    <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
+                      <NativeDateTimePicker
+                        value={startDatePickerValue}
+                        mode="date"
+                        display={Platform.OS === "ios" ? "spinner" : "default"}
+                        onChange={onStartDatePickerChange}
+                      />
+                      {Platform.OS === "ios" && (
+                        <View className="flex-row justify-end gap-3 px-2 pb-2">
+                          <Pressable
+                            onPress={() => setShowStartDatePicker(false)}
+                          >
+                            <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                              Done
+                            </Text>
+                          </Pressable>
+                        </View>
+                      )}
                     </View>
                   )}
+                </>
+              ) : (
+                <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
+                  <TextInput
+                    className="h-14 text-lg font-bold text-gray-900 dark:text-gray-100 px-3"
+                    placeholder="YYYY-MM-DD"
+                    placeholderTextColor="#9ca3af"
+                    value={startDateInput}
+                    onChangeText={handleStartDateTextChange}
+                    keyboardType="numbers-and-punctuation"
+                  />
                 </View>
               )}
-            </>
-          ) : (
-            <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
-              <TextInput
-                className="h-14 text-lg font-bold text-gray-900 dark:text-gray-100 px-3"
-                placeholder="YYYY-MM-DD"
-                placeholderTextColor="#9ca3af"
-                value={dueDateInput}
-                onChangeText={handleDueDateTextChange}
-                keyboardType="numbers-and-punctuation"
-              />
             </View>
-          )}
+
+            <View className="flex-1">
+              <View className="flex-row items-center justify-between mb-2 ml-1">
+                <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                  Due Date
+                </Text>
+                {dueDateError && (
+                  <Text className="text-[10px] text-red-500 font-semibold mr-1">
+                    Invalid
+                  </Text>
+                )}
+              </View>
+              {NativeDateTimePicker ? (
+                <>
+                  <Pressable
+                    onPress={openDueDatePicker}
+                    className={`h-16 bg-white dark:bg-gray-900 rounded-2xl border ${
+                      dueDateError
+                        ? "border-red-500 bg-red-50/50 dark:bg-red-950/20"
+                        : "border-gray-200 dark:border-gray-800"
+                    } px-4 shadow-sm flex-row items-center justify-between`}
+                  >
+                    <Text
+                      className={`text-lg font-bold ${
+                        dueDateInput
+                          ? "text-gray-900 dark:text-gray-100"
+                          : "text-gray-400 dark:text-gray-500"
+                      }`}
+                    >
+                      {dueDateInput || "Optional"}
+                    </Text>
+                    <Ionicons
+                      name="calendar-outline"
+                      size={20}
+                      color="#9ca3af"
+                    />
+                  </Pressable>
+                  {showDueDatePicker && (
+                    <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
+                      <NativeDateTimePicker
+                        value={dueDatePickerValue}
+                        mode="date"
+                        display={Platform.OS === "ios" ? "spinner" : "default"}
+                        onChange={onDueDatePickerChange}
+                      />
+                      {Platform.OS === "ios" && (
+                        <View className="flex-row justify-end gap-3 px-2 pb-2">
+                          <Pressable
+                            onPress={() => setShowDueDatePicker(false)}
+                          >
+                            <Text className="text-sm font-semibold text-gray-500 dark:text-gray-400">
+                              Done
+                            </Text>
+                          </Pressable>
+                        </View>
+                      )}
+                    </View>
+                  )}
+                </>
+              ) : (
+                <View className="mt-3 bg-white dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 px-2 py-2 shadow-sm">
+                  <TextInput
+                    className="h-14 text-lg font-bold text-gray-900 dark:text-gray-100 px-3"
+                    placeholder="Optional"
+                    placeholderTextColor="#9ca3af"
+                    value={dueDateInput}
+                    onChangeText={handleDueDateTextChange}
+                    keyboardType="numbers-and-punctuation"
+                  />
+                </View>
+              )}
+            </View>
+          </View>
         </View>
 
         <View className="mb-8 p-5 bg-white dark:bg-gray-900 rounded-3xl border border-gray-200 dark:border-gray-800 shadow-md">

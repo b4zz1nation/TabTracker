@@ -20,6 +20,7 @@ export interface Lend {
   interest_type: "Daily" | "Monthly" | "Yearly" | null;
   status: "Ongoing" | "Completed";
   description?: string | null;
+  start_date?: string | null;
   due_date?: string | null;
   reminders_enabled?: number;
   last_reminder_type?: string | null;
@@ -56,13 +57,14 @@ export function useLends() {
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
       overdueInterestRate: number | null = null,
       description: string | null = null,
+      startDate: string | null = null,
       dueDate: string | null = null,
       remindersEnabled: boolean = true,
     ) => {
       const now = new Date().toISOString();
       const referenceCode = await createUniqueReferenceForKind(db, "lend");
       await db.runAsync(
-        "INSERT INTO lends (reference_code, customer_id, amount, interest_enabled, interest_rate, overdue_interest_rate, interest_type, description, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO lends (reference_code, customer_id, amount, interest_enabled, interest_rate, overdue_interest_rate, interest_type, description, start_date, due_date, reminders_enabled, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         [
           referenceCode,
           customerId,
@@ -72,6 +74,7 @@ export function useLends() {
           overdueInterestRate,
           interestType,
           description,
+          startDate ?? now,
           dueDate,
           remindersEnabled ? 1 : 0,
           now,
@@ -91,11 +94,12 @@ export function useLends() {
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
       overdueInterestRate: number | null = null,
       description: string | null = null,
+      startDate: string | null = null,
       dueDate: string | null = null,
       remindersEnabled: boolean = true,
     ) => {
       await db.runAsync(
-        "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, overdue_interest_rate = ?, interest_type = ?, description = ?, due_date = ?, reminders_enabled = ? WHERE id = ?",
+        "UPDATE lends SET amount = ?, interest_enabled = ?, interest_rate = ?, overdue_interest_rate = ?, interest_type = ?, description = ?, start_date = ?, due_date = ?, reminders_enabled = ? WHERE id = ?",
         [
           amount,
           interestEnabled ? 1 : 0,
@@ -103,6 +107,7 @@ export function useLends() {
           overdueInterestRate,
           interestType,
           description,
+          startDate,
           dueDate,
           remindersEnabled ? 1 : 0,
           id,

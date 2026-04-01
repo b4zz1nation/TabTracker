@@ -59,6 +59,7 @@ function EntryCard({
       calculatePayoff({
         principal: entry.balance || 0,
         createdAt: entry.created_at,
+        startAt: entry.start_date ?? entry.created_at,
         dueDate: entry.due_date,
         interestEnabled: entry.interest_enabled === 1,
         interestRate: entry.interest_rate || 0,
@@ -127,7 +128,10 @@ function EntryCard({
         </View>
         <View className="flex-row justify-between items-center mt-4">
           <Text className="text-[10px] text-gray-400 font-bold uppercase">
-            Started {new Date(entry.created_at).toLocaleDateString()}
+            Started{" "}
+            {new Date(
+              entry.start_date ?? entry.created_at,
+            ).toLocaleDateString()}
           </Text>
           {!done && payments.length > 0 && (
             <Pressable
@@ -249,6 +253,7 @@ export default function CreditorDetailScreen() {
           calculatePayoff({
             principal: entry.balance || 0,
             createdAt: entry.created_at,
+            startAt: entry.start_date ?? entry.created_at,
             dueDate: entry.due_date,
             interestEnabled: entry.interest_enabled === 1,
             interestRate: entry.interest_rate || 0,
@@ -456,6 +461,7 @@ export default function CreditorDetailScreen() {
     const payoff = calculatePayoff({
       principal: selectedCreditor.balance || 0,
       createdAt: selectedCreditor.created_at,
+      startAt: selectedCreditor.start_date ?? selectedCreditor.created_at,
       dueDate: selectedCreditor.due_date,
       interestEnabled: selectedCreditor.interest_enabled === 1,
       interestRate: selectedCreditor.interest_rate || 0,
@@ -498,6 +504,7 @@ export default function CreditorDetailScreen() {
     const payoff = calculatePayoff({
       principal: selectedCreditor.balance || 0,
       createdAt: selectedCreditor.created_at,
+      startAt: selectedCreditor.start_date ?? selectedCreditor.created_at,
       dueDate: selectedCreditor.due_date,
       interestEnabled: selectedCreditor.interest_enabled === 1,
       interestRate: selectedCreditor.interest_rate || 0,

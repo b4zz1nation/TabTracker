@@ -3,6 +3,7 @@ type InterestType = "Daily" | "Monthly" | "Yearly" | null;
 type PayoffParams = {
   principal: number;
   createdAt: string;
+  startAt?: string | null;
   dueDate?: string | null;
   interestEnabled?: boolean;
   interestRate?: number;
@@ -12,6 +13,48 @@ type PayoffParams = {
 };
 
 const DAY_MS = 1000 * 60 * 60 * 24;
+
+function getDaysInMonth(year: number, monthIndex: number) {
+  return new Date(year, monthIndex + 1, 0).getDate();
+}
+
+function isLastDayOfMonth(date: Date) {
+  return date.getDate() === getDaysInMonth(date.getFullYear(), date.getMonth());
+}
+
+function addMonthsClamped(date: Date, monthsToAdd: number) {
+  const next = new Date(date);
+  const originalDay = date.getDate();
+  const preserveMonthEnd = isLastDayOfMonth(date);
+
+  next.setDate(1);
+  next.setMonth(next.getMonth() + monthsToAdd);
+
+  const targetDay = preserveMonthEnd
+    ? getDaysInMonth(next.getFullYear(), next.getMonth())
+    : Math.min(
+        originalDay,
+        getDaysInMonth(next.getFullYear(), next.getMonth()),
+      );
+
+  next.setDate(targetDay);
+  return next;
+}
+
+function addYearsClamped(date: Date, yearsToAdd: number) {
+  const next = new Date(date);
+  const originalMonth = date.getMonth();
+  const originalDay = date.getDate();
+  const preserveMonthEnd = isLastDayOfMonth(date);
+
+  next.setFullYear(next.getFullYear() + yearsToAdd, originalMonth, 1);
+  const targetDay = preserveMonthEnd
+    ? getDaysInMonth(next.getFullYear(), originalMonth)
+    : Math.min(originalDay, getDaysInMonth(next.getFullYear(), originalMonth));
+
+  next.setDate(targetDay);
+  return next;
+}
 
 function getElapsedIntervalsFromDates(
   startAt: Date,
@@ -29,11 +72,31 @@ function getElapsedIntervalsFromDates(
   }
 
   if (interestType === "Monthly") {
-    return Math.floor(diff / (DAY_MS * 30.4375));
+    let intervals = 0;
+    let cursor = new Date(startAt);
+
+    while (true) {
+      const next = addMonthsClamped(cursor, 1);
+      if (next.getTime() > endAt.getTime()) {
+        return intervals;
+      }
+      cursor = next;
+      intervals += 1;
+    }
   }
 
   if (interestType === "Yearly") {
-    return Math.floor(diff / (DAY_MS * 365.25));
+    let intervals = 0;
+    let cursor = new Date(startAt);
+
+    while (true) {
+      const next = addYearsClamped(cursor, 1);
+      if (next.getTime() > endAt.getTime()) {
+        return intervals;
+      }
+      cursor = next;
+      intervals += 1;
+    }
   }
 
   return 0;
@@ -73,6 +136,7 @@ export function getInterestStartAt(
 export function calculatePayoff({
   principal,
   createdAt,
+  startAt = null,
   dueDate = null,
   interestEnabled = true,
   interestRate = 0,
@@ -80,7 +144,8 @@ export function calculatePayoff({
   interestType = null,
   completedAt = null,
 }: PayoffParams) {
-  const start = new Date(createdAt);
+  const effectiveStartAt = startAt || createdAt;
+  const start = new Date(effectiveStartAt);
   const end = completedAt ? new Date(completedAt) : new Date();
   const due = dueDate ? new Date(dueDate) : null;
   const hasValidDue = !!due && !Number.isNaN(due.getTime());
@@ -115,29 +180,31 @@ export function calculatePayoff({
     }
   }
 
-  const preDueInterest =
+  const preDueBalance =
     interestEnabled && interestType
-      ? principal * ((interestRate || 0) / 100) * preDueIntervals
-      : 0;
-  const postDueInterest =
+      ? principal * Math.pow(1 + (interestRate || 0) / 100, preDueIntervals)
+      : principal;
+  const finalBalance =
     interestEnabled && interestType
-      ? principal * ((postDueRate || 0) / 100) * postDueIntervals
-      : 0;
+      ? preDueBalance * Math.pow(1 + (postDueRate || 0) / 100, postDueIntervals)
+      : principal;
+  const preDueInterest = Math.max(0, preDueBalance - principal);
+  const postDueInterest = Math.max(0, finalBalance - preDueBalance);
   const accruedInterest = preDueInterest + postDueInterest;
   const intervals = preDueIntervals + postDueIntervals;
-  const interestStartAt = hasValidDue ? createdAt : createdAt;
+  const interestStartAt = effectiveStartAt;
 
   return {
     intervals,
     preDueIntervals,
     postDueIntervals,
     interestStartAt,
-    daysElapsed: getElapsedDays(createdAt, completedAt),
-    interestDaysElapsed: getElapsedDays(createdAt, completedAt),
+    daysElapsed: getElapsedDays(effectiveStartAt, completedAt),
+    interestDaysElapsed: getElapsedDays(effectiveStartAt, completedAt),
     label: getDurationLabel(intervals, interestType),
     preDueInterest,
     postDueInterest,
     accruedInterest,
-    payoffTotal: principal + accruedInterest,
+    payoffTotal: finalBalance,
   };
 }

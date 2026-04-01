@@ -19,6 +19,7 @@ export interface Creditor {
   interest_rate: number;
   overdue_interest_rate?: number | null;
   interest_type: "Daily" | "Monthly" | "Yearly" | null;
+  start_date?: string | null;
   due_date?: string | null;
   reminders_enabled?: number;
   last_reminder_type?: string | null;
@@ -62,6 +63,7 @@ export function useCreditors() {
       interestRate: number = 0,
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
       overdueInterestRate: number | null = null,
+      startDate: string | null = null,
       dueDate: string | null = null,
       remindersEnabled: boolean = true,
       options?: {
@@ -77,9 +79,10 @@ export function useCreditors() {
           if (existing) throw new Error("DUPLICATE_NAME");
         }
 
+        const now = new Date().toISOString();
         const referenceCode = await createUniqueReferenceForKind(db, "tab");
         await db.runAsync(
-          "INSERT INTO creditors (reference_code, name, balance, description, interest_enabled, interest_rate, overdue_interest_rate, interest_type, due_date, reminders_enabled, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+          "INSERT INTO creditors (reference_code, name, balance, description, interest_enabled, interest_rate, overdue_interest_rate, interest_type, start_date, due_date, reminders_enabled, completed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
           [
             referenceCode,
             name.trim(),
@@ -89,6 +92,7 @@ export function useCreditors() {
             interestRate,
             overdueInterestRate,
             interestType,
+            startDate ?? now,
             dueDate,
             remindersEnabled ? 1 : 0,
             null,
@@ -115,6 +119,7 @@ export function useCreditors() {
       interestRate: number = 0,
       interestType: "Daily" | "Monthly" | "Yearly" | null = null,
       overdueInterestRate: number | null = null,
+      startDate: string | null = null,
       dueDate: string | null = null,
       remindersEnabled: boolean = true,
     ) => {
@@ -126,7 +131,7 @@ export function useCreditors() {
         if (existing) throw new Error("DUPLICATE_NAME");
 
         await db.runAsync(
-          "UPDATE creditors SET name = ?, balance = ?, description = ?, interest_enabled = ?, interest_rate = ?, overdue_interest_rate = ?, interest_type = ?, due_date = ?, reminders_enabled = ?, completed_at = CASE WHEN ? <= 0 THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = ?",
+          "UPDATE creditors SET name = ?, balance = ?, description = ?, interest_enabled = ?, interest_rate = ?, overdue_interest_rate = ?, interest_type = ?, start_date = ?, due_date = ?, reminders_enabled = ?, completed_at = CASE WHEN ? <= 0 THEN COALESCE(completed_at, CURRENT_TIMESTAMP) ELSE NULL END WHERE id = ?",
           [
             name.trim(),
             balance,
@@ -135,6 +140,7 @@ export function useCreditors() {
             interestRate,
             overdueInterestRate,
             interestType,
+            startDate,
             dueDate,
             remindersEnabled ? 1 : 0,
             balance,

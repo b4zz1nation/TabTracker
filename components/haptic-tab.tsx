@@ -4,7 +4,12 @@ import * as Haptics from "expo-haptics";
 import React, { useEffect, useRef } from "react";
 import { Animated, View } from "react-native";
 
+import { Colors } from "@/constants/theme";
+import { useColorScheme } from "@/hooks/use-color-scheme";
+
 export function HapticTab(props: BottomTabBarButtonProps) {
+  const colorScheme = useColorScheme();
+  const themeColors = Colors[colorScheme ?? "light"];
   const isFocused = Boolean(props.accessibilityState?.selected);
   const activeAnim = useRef(new Animated.Value(isFocused ? 1 : 0)).current;
 
@@ -56,7 +61,7 @@ export function HapticTab(props: BottomTabBarButtonProps) {
           top: "50%",
           marginTop: -28,
           borderRadius: 14,
-          backgroundColor: "#0ea5e9",
+          backgroundColor: themeColors.tint,
           opacity: activeOpacity,
           transform: [{ scale: activeScale }],
           zIndex: 0,
